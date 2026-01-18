@@ -1,0 +1,72 @@
+plugins {
+    id 'java'
+    // 4.0.1 は存在しません！必ず 3.4.1 にしてください
+    id 'org.springframework.boot' version '3.4.1'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.sqlcanvas'
+version = '0.0.1-SNAPSHOT'
+description = 'ToDoAPI'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // --- Web API ---
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    // 入力チェック (@Valid)
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    // API仕様書 (SpringDoc / OpenAPI) - 重複を解消して最新化
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.5'
+
+    // --- DB接続 / 管理 ---
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly 'org.postgresql:postgresql'
+
+    // Flyway (DBマイグレーション)
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+
+    // --- セキュリティ ---
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    // JWT
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+    // --- 開発ツール ---
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // Security テスト (csrf() や認証のシミュレートに必須)
+    testImplementation 'org.springframework.security:spring-security-test'
+
+    // Docker を使ったテスト支援 (Testcontainers)
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
+
+    // アーキテクチャやランタイムの設定
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.2.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'net.jqwik:jqwik:1.9.2'
+}
+
+tasks.named('test') {
+    useJUnitPlatform() // JUnit 5 を使う設定
+}

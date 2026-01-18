@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gacha_system_postgres
+    environment:
+      POSTGRES_USER: gacha_db_user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: gacha_system_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_gacha_data:/var/lib/postgresql/data
+    # タイムゾーンをJSTに設定（ログ確認用）
+
+volumes:
+  postgres_gacha_data:
