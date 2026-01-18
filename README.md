@@ -1,155 +1,142 @@
-# SchoolAsset-Manager
+# Gacha System Implementation (DDD Practice)
 
-学校機材貸出管理システム（API）
+Java 21 と Spring Boot 3.x/4.x を活用し、ドメイン駆動設計（DDD）の実践を目的とした堅牢なガチャシステムのリファレンス実装です。
 
-## 概要
-学校内のPC・カメラなどの機材貸出をデジタル化するREST APIです。  
-学生の予約申請 → 教員の承認 → 事務員の貸出・返却をサポートします。
+## 🎯 プロジェクトの目的
+「17歳、高校2年生でバックエンドエンジニアを目指す」という目標に向け、実務レベルの設計・実装スキルを証明するためのポートフォリオです。単に動くだけでなく、金融システム並みのデータ整合性と、保守性の高いコードベースを目指しています。
 
-## 技術スタック
-- Java 21
-- Spring Boot 3.4.1
-- Spring Security + JWT
-- Spring Data JPA + Flyway
-- PostgreSQL
-- Gradle
+## 🛠 技術スタック
+- **Language:** Java 21 (record, sealed interface, pattern matching)
+- **Framework:** Spring Boot 4.0.1
+- **Database:** PostgreSQL (with Stored Procedures, Triggers, CHECK Constraints)
+- **Architecture:** Domain-Driven Design (DDD) / Hexagonal Architecture
+- **Error Handling:** Result Pattern (Railway Oriented Programming)
 
-## 現在の状態
-MVP開発中（認証・機材検索・予約申請を実装中）
-ビルドはできるが現在ではまだ使える状態ではない
+## ✨ 設計のこだわり
 
-## ローカル起動方法
-1. PostgreSQLを起動（docker-compose up -d）
-2. `./gradlew bootRun`
-3. http://localhost:8080 にアクセス
+### 1. 不変条件の徹底的な保護
+ドメインモデル（Entity/VO）とDBレイヤー（CHECK制約・トリガー）の両面でガードを固めています。
+- 「ウォレット残高が負にならない」
+- 「ガチャの排出確率合計が厳密に100%（10000/10000）である」
+といったビジネスルール（不変条件）をシステム全体で保証します。
 
-## 主な機能（MVP）
-- JWT認証（学籍番号ベース）
-- 機材検索（GET /api/v1/models）
-- 予約申請（POST /api/v1/reservations）
-- 在庫排他制御（楽観的ロック予定）
+### 2. Result パターンによる型安全なエラーハンドリング
+例外（Exception）を投げっぱなしにするのではなく、`Result<T>` 型を戻り値として使用しています。
+これにより、呼び出し側はコンパイルレベルで「成功」と「失敗」の両方のハンドリングを強制され、不当な状態のまま処理が続行される（不変条件が壊れる）ことを物理的に防ぎます。
 
-## 今後の予定
-- 予約承認・貸出・返却フロー
-- 延滞警告・通知
-- ブラックリスト機能
+### 3. 誤差ゼロの整数ウェイト抽選アルゴリズム
+浮動小数点数（float/double）を一切使わず、整数（Weight）による累積減算方式を採用しています。
+これにより、計算誤差による確率の不整合を排除した、公平で正確な抽選を実現しています。
 
-## 設計ドキュメント
-Notion: [リンクを貼る]
+## 📂 パッケージ構成 (DDD)
+```text
+src/main/java/com/yourcompany/
+├── domain/                # ドメイン層 (ビジネスロジックの核)
+│   ├── model/             # Entity, Value Object, Aggregate Root
+│   ├── service/           # Domain Services (LotteryService等)
+│   ├── shared/            # Result型, 共通ErrorCode
+│   └── repository/        # Repository Interfaces
+├── application/           # アプリケーション層 (ユースケース)
+├── infrastructure/        # インフラストラクチャ層 (DB実装, API通信)
+└── web/                   # プレゼンテーション層 (Controller, GlobalExceptionHandler)
+```
 
-## データベース設計 (ER図)
-
+## ER図
 ```mermaid
 erDiagram
-    %% テーマカラー（GitHubダーク/ライトで自然に見える）
-    %% ユーザーグループ（青系）
-    USERS {
-        bigint id PK
-        varchar email UK
-        varchar password_hash
-        varchar role "STUDENT / FACULTY / CLERK"
-        timestamptz created_at
+    %% ==========================================
+    %% ユーザー資産・状態管理 (User Domain)
+    %% ==========================================
+    wallets {
+        uuid user_id PK "アプリ側ID"
+        integer paid_stones "CHECK(0..99999999)"
+        integer free_stones "CHECK(0..99999999)"
+        bigint version "楽観ロック"
         timestamptz updated_at
     }
 
-    STUDENTS {
-        bigint user_id PK,FK
-        varchar student_number UK
-        int grade
-        varchar department
-        boolean is_suspended
-        text suspension_reason
-        date graduation_date
-        timestamptz created_at
+    user_items {
+        uuid user_id PK, FK
+        uuid item_id PK, FK
+        integer quantity "CHECK(>=0) & Trigger上限"
+        bigint version
         timestamptz updated_at
     }
 
-    FACULTIES {
-        bigint user_id PK,FK
-        varchar faculty_code UK
-        timestamptz created_at
+    user_gacha_states {
+        uuid user_id PK, FK
+        uuid gacha_pool_id PK, FK
+        integer current_pity_count "天井カウント CHECK(0..9999)"
+        integer current_guaranteed_count "確定枠カウント CHECK(0..9999)"
         timestamptz updated_at
     }
 
-    CLERKS {
-        bigint user_id PK,FK
-        varchar clerk_code UK
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    %% 機材グループ（緑系）
-    CATEGORIES {
-        bigint id PK
-        varchar name UK
-        text description
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    MODELS {
-        bigint id PK
-        bigint category_id FK
-        varchar name
-        text description
-        int total_quantity
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    ASSETS {
-        bigint id PK
-        bigint model_id FK
-        varchar serial_number UK
-        varchar status "AVAILABLE / LENT / REPAIR / LOST / MAINTENANCE"
-        varchar location
-        text note
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    %% 予約・貸出グループ（紫系）
-    RESERVATIONS {
-        bigint id PK
-        bigint student_id FK
-        bigint model_id FK
+    %% ==========================================
+    %% ガチャ定義・マスタ (Master Data Domain)
+    %% ==========================================
+    gacha_pools {
+        uuid id PK "UUID v7"
+        varchar_50 name "CHECK(len>0)"
         timestamptz start_at
-        timestamptz end_at
-        varchar status "PENDING / APPROVED / REJECTED / CANCELLED"
-        bigint approved_by FK
-        timestamptz approved_at
-        text reason
-        timestamptz created_at
-        timestamptz updated_at
+        timestamptz end_at "CHECK(end > start)"
+        integer cost_amount "CHECK(1..10000)"
+        integer pity_ceiling_count "DEFAULT 0"
+        integer guaranteed_trigger_count "DEFAULT 0"
     }
 
-    LOAN_RECORDS {
-        bigint id PK
-        bigint reservation_id FK
-        bigint asset_id FK
-        bigint model_id FK
-        bigint student_id FK
-        timestamptz loaned_at
-        timestamptz due_date
-        timestamptz returned_at
-        bigint returned_by FK
-        text note
+    items {
+        uuid id PK "UUID v7"
+        varchar_50 name "CHECK(len>0)"
+        varchar_20 rarity "CHECK IN(SSR, SR...)"
+        integer max_capacity "CHECK(1..999999)"
         timestamptz created_at
-        timestamptz updated_at
     }
 
-    %% リレーション（モダンなラベル）
-    USERS ||--|| STUDENTS     : "1:1 継承"
-    USERS ||--|| FACULTIES    : "1:1 継承"
-    USERS ||--|| CLERKS       : "1:1 継承"
+    gacha_emissions {
+        uuid id PK "UUID v7"
+        uuid gacha_pool_id FK
+        uuid item_id FK
+        integer weight "CHECK(>0) & Trigger合計検証"
+        boolean is_pickup
+    }
 
-    CATEGORIES ||--o{ MODELS  : "1:N 分類"
-    MODELS     ||--o{ ASSETS  : "1:N 個体管理"
-    MODELS     ||--o{ RESERVATIONS : "1:N 予約対象"
-    STUDENTS   ||--o{ RESERVATIONS : "1:N 申請者"
-    FACULTIES  ||--o{ RESERVATIONS : "1:N 承認者"
+    %% ==========================================
+    %% 履歴・監査 (History & Audit Domain)
+    %% ==========================================
+    gacha_transactions {
+        timestamptz executed_at PK "Partition Key"
+        uuid id PK "UUID v7 / RequestID"
+        uuid user_id FK "論理参照"
+        uuid gacha_pool_id FK "論理参照"
+        integer consumed_paid
+        integer consumed_free
+        jsonb emission_results "排出結果リスト(正規化廃止)"
+    }
 
-    ASSETS     ||--o{ LOAN_RECORDS : "1:N 貸出実績"
-    STUDENTS   ||--o{ LOAN_RECORDS : "1:N 借用者"
-    CLERKS     ||--o{ LOAN_RECORDS : "1:N 返却処理者"
-    RESERVATIONS ||--o| LOAN_RECORDS : "1:0..1 予約→貸出昇格"
+    audit_logs {
+        uuid id PK "UUID v7"
+        varchar target_table
+        text record_id
+        varchar operation
+        jsonb old_data "変更前完全記録"
+        jsonb new_data "変更後完全記録"
+        timestamptz changed_at
+    }
+
+    %% ==========================================
+    %% リレーション定義
+    %% ==========================================
+    
+    %% User -> Inventory / State
+    wallets ||--o{ user_items : "所持"
+    wallets ||--o{ user_gacha_states : "状態管理"
+    
+    %% Master Connections
+    items ||--o{ user_items : "定義参照"
+    items ||--o{ gacha_emissions : "排出対象"
+    gacha_pools ||--o{ gacha_emissions : "構成要素"
+    gacha_pools ||--o{ user_gacha_states : "進捗対象"
+
+    %% Transaction Connections (Logical FKs in partitioning)
+    wallets ||--o{ gacha_transactions : "実行ログ"
+    gacha_pools ||--o{ gacha_transactions : "実行プール"
