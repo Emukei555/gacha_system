@@ -140,3 +140,111 @@ erDiagram
     %% Transaction Connections (Logical FKs in partitioning)
     wallets ||--o{ gacha_transactions : "実行ログ"
     gacha_pools ||--o{ gacha_transactions : "実行プール"
+```
+------------------------------------------------------------
+
+```mermaid
+erDiagram
+    %% ユーザー資産（Aggregate Root）
+    WALLETS {
+        UUID user_id PK "アプリ生成UUID"
+        INTEGER paid_stones "CHECK (>= 0)"
+        INTEGER free_stones "CHECK (>= 0)"
+        BIGINT version "楽観的ロック"
+        TIMESTAMP_WITH_TIME_ZONE updated_at
+    }
+
+    %% アイテムマスタ
+    ITEMS {
+        UUID id PK "gen_random_uuid()"
+        VARCHAR name "NOT NULL"
+        VARCHAR rarity "COMMON-RARE等"
+        INTEGER max_capacity "CHECK (> 0)"
+        TIMESTAMP_WITH_TIME_ZONE created_at
+    }
+
+    %% ガチャプール（Aggregate Root）
+    GACHA_POOLS {
+        UUID id PK "gen_random_uuid()"
+        VARCHAR name "NOT NULL"
+        TIMESTAMP_WITH_TIME_ZONE start_at "NOT NULL"
+        TIMESTAMP_WITH_TIME_ZONE end_at "NOT NULL"
+        INTEGER cost_amount "CHECK (> 0)"
+        INTEGER pity_ceiling_count "DEFAULT 300"
+        INTEGER guaranteed_trigger_count "DEFAULT 0"
+    }
+
+    %% 排出定義
+    GACHA_EMISSIONS {
+        UUID id PK "gen_random_uuid()"
+        UUID gacha_pool_id FK
+        UUID item_id FK
+        INTEGER weight "CHECK (> 0)"
+        BOOLEAN is_pickup
+        VARCHAR unique_constraint "UNIQUE(pool_id, item_id)"
+    }
+
+    %% ユーザー所持アイテム
+    USER_ITEMS {
+        UUID user_id PK,FK
+        UUID item_id PK,FK
+        INTEGER quantity "CHECK (>= 0)"
+        BIGINT version
+        TIMESTAMP_WITH_TIME_ZONE updated_at
+    }
+
+    %% ユーザーごとのガチャ状態
+    USER_GACHA_STATES {
+        UUID user_id PK,FK
+        UUID gacha_pool_id PK,FK
+        INTEGER current_pity_count "CHECK (>= 0)"
+        INTEGER current_guaranteed_count "CHECK (>= 0)"
+        BIGINT version
+        TIMESTAMP_WITH_TIME_ZONE updated_at
+    }
+
+    %% ガチャ実行トランザクション（履歴）
+    GACHA_TRANSACTIONS {
+        UUID id PK "RequestID"
+        TIMESTAMP_WITH_TIME_ZONE executed_at PK "Partition Key"
+        UUID user_id FK
+        UUID gacha_pool_id FK
+        INTEGER consumed_paid_stones
+        INTEGER consumed_free_stones
+    }
+
+    %% 排出結果詳細
+    GACHA_TRANSACTION_DETAILS {
+        UUID id PK
+        TIMESTAMP_WITH_TIME_ZONE transaction_executed_at PK
+        UUID transaction_id FK
+        UUID item_id FK
+        VARCHAR emission_type "NORMAL/PITY等"
+        INTEGER item_order
+    }
+
+    %% 監査ログ
+    AUDIT_LOGS {
+        UUID id PK
+        VARCHAR table_name
+        UUID record_id
+        VARCHAR operation "INSERT/UPDATE等"
+        TIMESTAMP_WITH_TIME_ZONE changed_at
+        VARCHAR changed_by
+        JSONB old_data
+        JSONB new_data
+    }
+
+    %% 関係性
+    WALLETS ||--o{ USER_ITEMS : "owns"
+    WALLETS ||--o{ USER_GACHA_STATES : "has state"
+    WALLETS ||--o{ GACHA_TRANSACTIONS : "executes"
+    ITEMS ||--o{ GACHA_EMISSIONS : "emitted by"
+    ITEMS ||--o{ USER_ITEMS : "owned as"
+    ITEMS ||--o{ GACHA_TRANSACTION_DETAILS : "obtained"
+    GACHA_POOLS ||--o{ GACHA_EMISSIONS : "contains"
+    GACHA_POOLS ||--o{ USER_GACHA_STATES : "tracked by"
+    GACHA_POOLS ||--o{ GACHA_TRANSACTIONS : "executed on"
+    GACHA_TRANSACTIONS ||--o{ GACHA_TRANSACTION_DETAILS : "contains"
+
+
