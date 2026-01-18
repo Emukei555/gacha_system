@@ -11,7 +11,7 @@ Java 21 と Spring Boot 3.x/4.x を活用し、ドメイン駆動設計（DDD）
 - **Database:** PostgreSQL (with Stored Procedures, Triggers, CHECK Constraints)
 - **Architecture:** Domain-Driven Design (DDD) / Hexagonal Architecture
 - **Error Handling:** Result Pattern (Railway Oriented Programming)
-- **Java 21 Virtual Threads
+- **Java 21 Virtual Threads**
 
 ## ✨ 設計のこだわり
 
