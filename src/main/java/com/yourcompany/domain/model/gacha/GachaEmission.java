@@ -30,7 +30,7 @@ public class GachaEmission implements WeightedItem {
     @Column(name = "is_pickup")
     private boolean isPickup;
 
-    // コンストラクタ
+    // コンストラクタの作成
     public GachaEmission(UUID itemId, int weight, boolean isPickup) {
         if (weight <= 0) throw new IllegalArgumentException("Weight must be positive");
         this.id = UUID.randomUUID();
