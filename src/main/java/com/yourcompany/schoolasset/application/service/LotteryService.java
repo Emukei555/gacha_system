@@ -1,4 +1,4 @@
-package com.yourcompany.domain.service;
+package com.yourcompany.schoolasset.application.service;
 
 import com.yourcompany.domain.model.gacha.WeightedItem;
 import com.yourcompany.domain.shared.exception.GachaErrorCode;
@@ -10,7 +10,6 @@ import java.util.random.RandomGenerator;
 
 public class LotteryService {
 
-    // 予測困難な乱数生成器 (ガチャには必須)
     private final RandomGenerator random = new SecureRandom();
 
     /**
