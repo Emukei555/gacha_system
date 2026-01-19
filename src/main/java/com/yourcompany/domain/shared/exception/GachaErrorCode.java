@@ -42,20 +42,17 @@ public enum GachaErrorCode {
     }
 
     /**
-     * Failureを生成（動的な値をメッセージに埋め込む）
-     * 例: GachaErrorCode.INSUFFICIENT_BALANCE.withArgs(150)
-     */
-    /**
      * ★今回必要なやつ：カスタムメッセージを受け取って Failure を返す
+     * 例: GachaErrorCode.INSUFFICIENT_BALANCE.toFailure("有償石が不足しています（必要: 150, 所持: 100）")
      */
-    public <T> com.yourcompany.domain.shared.result.Result.Failure<T> toFailure(String customMessage) {
-        return new com.yourcompany.domain.shared.result.Result.Failure<>(this, customMessage);
+    public <T> Result.Failure<T> toFailure(String customMessage) {
+        return new Result.Failure<>(this, customMessage);
     }
 
     /**
      * 動的な値を埋め込む (例: "残り: %d")
      */
-    public <T> com.yourcompany.domain.shared.result.Result.Failure<T> withArgs(Object... args) {
-        return new com.yourcompany.domain.shared.result.Result.Failure<>(this, String.format(this.defaultMessage, args));
+    public <T> Result.Failure<T> withArgs(Object... args) {
+        return new Result.Failure<>(this, String.format(this.defaultMessage, args));
     }
 }
