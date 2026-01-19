@@ -1,49 +1,94 @@
-# Gacha System Implementation (DDD Practice)
+# 💎 Ultimate Gacha System – DDD実践プロジェクト (WIP)
 
-Java 21 と Spring Boot 3.x/4.x を活用し、ドメイン駆動設計（DDD）の実践を目的とした堅牢なガチャシステムのリファレンス実装です。
+**AI時代に生き残るための「DDD設計力」を鍛えるバックエンド実装**
 
-## 🎯 プロジェクトの目的
-「17歳、高校2年生でバックエンドエンジニアを目指す」という目標に向け、実務レベルの設計・実装スキルを証明するためのポートフォリオです。単に動くだけでなく、金融システム並みのデータ整合性と、保守性の高いコードベースを目指しています。
+[![Java](https://img.shields.io/badge/Java-21-blue?logo=openjdk)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0-green?logo=springboot)](https://spring.io/projects/spring-boot)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue?logo=postgresql)](https://www.postgresql.org/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## 🛠 技術スタック
-- **Language:** Java 21 (record, sealed interface, pattern matching)
-- **Framework:** Spring Boot 4.0.1
-- **Database:** PostgreSQL (with Stored Procedures, Triggers, CHECK Constraints)
-- **Architecture:** Domain-Driven Design (DDD) / Hexagonal Architecture
-- **Error Handling:** Result Pattern (Railway Oriented Programming)
-- **Java 21 Virtual Threads**
+## 目次
+- [プロジェクト概要](#プロジェクト概要)
+- [なぜDDDなのか？ – AI時代に求められる本質](#なぜdddなのか--ai時代に求められる本質)
+- [設計思想 & アーキテクチャ](#設計思想--アーキテクチャ)
+- [主要ドメインモデル（DDD視点）](#主要ドメインモデルddd視点)
+- [ER図](#er図)
+- [技術スタック](#技術スタック)
+- [セットアップ & 実行](#セットアップ--実行)
+- [現在のステータス](#現在のステータス)
+- [著者 / モチベーション](#著者--モチベーション)
 
-## ✨ 設計のこだわり
+## プロジェクト概要
 
-### 1. 不変条件の徹底的な保護
-ドメインモデル（Entity/VO）とDBレイヤー（CHECK制約・トリガー）の両面でガードを固めています。
-- 「ウォレット残高が負にならない」
-- 「ガチャの排出確率合計が厳密に100%（10000/10000）である」
-といったビジネスルール（不変条件）をシステム全体で保証します。
+本プロジェクトは、**Domain-Driven Design (DDD)** を徹底的に実践したソーシャルゲーム向けガチャシステムのバックエンドです。  
+単なる機能実装ではなく、以下のDDDの核心をコードで体現することを目的としています：
 
-### 2. Result パターンによる型安全なエラーハンドリング
-例外（Exception）を投げっぱなしにするのではなく、`Result<T>` 型を戻り値として使用しています。
-これにより、呼び出し側はコンパイルレベルで「成功」と「失敗」の両方のハンドリングを強制され、不当な状態のまま処理が続行される（不変条件が壊れる）ことを物理的に防ぎます。
+- **ユビキタス言語** をコードに落とし込み、ビジネスドメインを正確に表現
+- **集約（Aggregate）** 内で不変条件（Invariant）を強制的に守る
+- **値オブジェクト（Value Object）** で型安全 + 意味のあるドメイン概念を表現
+- **Result型** によるRailway Oriented Programmingで例外に頼らない制御フロー
 
-### 3. 誤差ゼロの整数ウェイト抽選アルゴリズム
-浮動小数点数（float/double）を一切使わず、整数（Weight）による累積減算方式を採用しています。
-これにより、計算誤差による確率の不整合を排除した、公平で正確な抽選を実現しています。
+生成AIがコードを爆速で書ける時代に**「AIが出せないドメイン設計力」** が差別化の鍵になると考えています。  
+このシステムは、金融システム並みのデータ整合性を目指し、保守性の高いコードベースを構築しています。
 
-## 📂 パッケージ構成 (DDD)
-```text
-src/main/java/com/yourcompany/
-├── domain/                # ドメイン層 (ビジネスロジックの核)
-│   ├── model/             # Entity, Value Object, Aggregate Root
-│   ├── service/           # Domain Services (LotteryService等)
-│   ├── shared/            # Result型, 共通ErrorCode
-│   └── repository/        # Repository Interfaces
-├── application/           # アプリケーション層 (ユースケース)
-├── infrastructure/        # インフラストラクチャ層 (DB実装, API通信)
-└── web/                   # プレゼンテーション層 (Controller, GlobalExceptionHandler)
+## なぜDDDなのか？ – AI時代に求められる本質
+
+- AIはCRUDやテンプレートコードを完璧に生成するが、**「ビジネス文脈を読み取り、不変条件をコードに落とし込む」** ことはまだ苦手。
+- DDDは**「ドメインを深く理解し、モデル化する力」** を要求する → これこそAIに代替されにくいスキル。
+- 本プロジェクトは、**「なぜこの設計にしたのか」を常に語れるエンジニアになるための訓練場** です。  
+  特に、ガチャの「天井カウント」「優先消費ルール」「排出確率の整合性」といった複雑なビジネスルールを、DDDの集約と値オブジェクトで表現しています。
+
+## 設計思想 & アーキテクチャ
+
+### 1. DDDの核心を実践
+- **集約（Aggregate）**：`GachaState`、`Wallet` などのルートエンティティ内で状態遷移と不変条件を完結。集約の境界を明確にし、トランザクションの範囲を最小化。
+- **値オブジェクト（Value Object）**：`Gems`、`Money`、`RequestId` などで型安全 + 不変性を確保。負値やオーバーフローをコンパイルレベルで防ぐ。
+- **ユビキタス言語**：メソッド名・クラス名にドメイン語をそのまま反映（`updateState`, `isPityReached`, `consume` など）。ビジネス側との共通言語をコードに反映。
+- **防御的ドメイン設計**：DBレイヤー（CHECK制約・トリガー）とコードレイヤー（ガード節）の両面で不変条件を保護。
+
+### 2. Railway Oriented Error Handling (Resultパターン)
+例外による制御フローを避け、失敗を値として明示的に扱う。DDDの不変条件違反を型安全に伝播。
+
+```java
+// Wallet.java (Aggregate Root)
+public Result<Wallet> consume(int amount) {
+    return Gems.of(paid, free)
+        .flatMap(gems -> gems.subtract(amount))
+        .map(subtracted -> {
+            this.paid = subtracted.paid();
+            this.free = subtracted.free();
+            return this;
+        });
+}
+
+3. Defensive Domain Modeling（防御的ドメイン設計）「ありえない状態」をコードで表現させない。java
+
+// GachaState.java (Aggregate Root)
+public Result<GachaState> updateState(boolean isSsrEmitted, GachaPool pool) {
+    int nextPity = isSsrEmitted ? 0 : this.currentPityCount + 1;
+    
+    // 不変条件: 天井を超えない
+    if (pool.getPityCeiling() > 0) {
+        nextPity = Math.min(nextPity, pool.getPityCeiling());
+    }
+    
+    this.currentPityCount = nextPity;
+    return Result.success(this);
+}
 ```
+主要ドメインモデル（DDD視点）Gems (Value Object)
+有償/無償の優先消費ルールをカプセル化。負値・オーバーフロー防止。
+GachaState (Aggregate Root)
+ユーザーごとの天井・確定枠進捗を管理。状態遷移をEntity内で完結。
+Wallet (Aggregate Root)
+石の残高管理。有償優先消費 + オーバーフローガード。
+InventoryItem (Entity)
+排出アイテムの数量管理。上限超過防止。
+RequestId (Value Object)
+冪等性キー（UUID v7）でログ追跡・重複防止。
 
-## ER図
-```mermaid
+（詳細なER図は以下を参照）ER図mermaid
+``` mermaid
 erDiagram
     %% ==========================================
     %% ユーザー資産・状態管理 (User Domain)
@@ -106,7 +151,7 @@ erDiagram
     %% ==========================================
     gacha_transactions {
         timestamptz executed_at PK "Partition Key"
-        uuid id PK "UUID v7 / RequestID"
+        uuid id PK "UUID v7"
         uuid user_id FK "論理参照"
         uuid gacha_pool_id FK "論理参照"
         integer consumed_paid
@@ -141,111 +186,33 @@ erDiagram
     %% Transaction Connections (Logical FKs in partitioning)
     wallets ||--o{ gacha_transactions : "実行ログ"
     gacha_pools ||--o{ gacha_transactions : "実行プール"
-```
-------------------------------------------------------------
+``` 
 
-```mermaid
-erDiagram
-    %% ユーザー資産（Aggregate Root）
-    WALLETS {
-        UUID user_id PK "アプリ生成UUID"
-        INTEGER paid_stones "CHECK (>= 0)"
-        INTEGER free_stones "CHECK (>= 0)"
-        BIGINT version "楽観的ロック"
-        TIMESTAMP_WITH_TIME_ZONE updated_at
-    }
+技術スタックLanguage: Java 21 (record, sealed interface, pattern matching)
+Framework: Spring Boot 4.0.1
+Database: PostgreSQL (with Stored Procedures, Triggers, CHECK Constraints)
+Architecture: Domain-Driven Design (DDD) / Hexagonal Architecture
+Error Handling: Result Pattern (Railway Oriented Programming)
+Java 21 Virtual Threads
 
-    %% アイテムマスタ
-    ITEMS {
-        UUID id PK "gen_random_uuid()"
-        VARCHAR name "NOT NULL"
-        VARCHAR rarity "COMMON-RARE等"
-        INTEGER max_capacity "CHECK (> 0)"
-        TIMESTAMP_WITH_TIME_ZONE created_at
-    }
+セットアップ & 実行前提条件: Docker & Docker Compose, JDK 21bash
 
-    %% ガチャプール（Aggregate Root）
-    GACHA_POOLS {
-        UUID id PK "gen_random_uuid()"
-        VARCHAR name "NOT NULL"
-        TIMESTAMP_WITH_TIME_ZONE start_at "NOT NULL"
-        TIMESTAMP_WITH_TIME_ZONE end_at "NOT NULL"
-        INTEGER cost_amount "CHECK (> 0)"
-        INTEGER pity_ceiling_count "DEFAULT 300"
-        INTEGER guaranteed_trigger_count "DEFAULT 0"
-    }
+# 1. リポジトリのクローン
+git clone https://github.com/Emukei555/gacha_system.git
+cd gacha_system
 
-    %% 排出定義
-    GACHA_EMISSIONS {
-        UUID id PK "gen_random_uuid()"
-        UUID gacha_pool_id FK
-        UUID item_id FK
-        INTEGER weight "CHECK (> 0)"
-        BOOLEAN is_pickup
-        VARCHAR unique_constraint "UNIQUE(pool_id, item_id)"
-    }
+# 2. データベースの起動 (Docker)
+docker-compose up -d
 
-    %% ユーザー所持アイテム
-    USER_ITEMS {
-        UUID user_id PK,FK
-        UUID item_id PK,FK
-        INTEGER quantity "CHECK (>= 0)"
-        BIGINT version
-        TIMESTAMP_WITH_TIME_ZONE updated_at
-    }
+# 3. アプリケーションのビルド & 起動
+./gradlew bootRun
 
-    %% ユーザーごとのガチャ状態
-    USER_GACHA_STATES {
-        UUID user_id PK,FK
-        UUID gacha_pool_id PK,FK
-        INTEGER current_pity_count "CHECK (>= 0)"
-        INTEGER current_guaranteed_count "CHECK (>= 0)"
-        BIGINT version
-        TIMESTAMP_WITH_TIME_ZONE updated_at
-    }
+現在のステータス (WIP)Core Domain: Wallet, Money, RequestId, GachaState
+Shared Kernel: Result<T>, ErrorCode
+Application Service: ガチャ実行トランザクション
+API Layer: REST Controller
+Infrastructure: Repository Impl
 
-    %% ガチャ実行トランザクション（履歴）
-    GACHA_TRANSACTIONS {
-        UUID id PK "RequestID"
-        TIMESTAMP_WITH_TIME_ZONE executed_at PK "Partition Key"
-        UUID user_id FK
-        UUID gacha_pool_id FK
-        INTEGER consumed_paid_stones
-        INTEGER consumed_free_stones
-    }
-
-    %% 排出結果詳細
-    GACHA_TRANSACTION_DETAILS {
-        UUID id PK
-        TIMESTAMP_WITH_TIME_ZONE transaction_executed_at PK
-        UUID transaction_id FK
-        UUID item_id FK
-        VARCHAR emission_type "NORMAL/PITY等"
-        INTEGER item_order
-    }
-
-    %% 監査ログ
-    AUDIT_LOGS {
-        UUID id PK
-        VARCHAR table_name
-        UUID record_id
-        VARCHAR operation "INSERT/UPDATE等"
-        TIMESTAMP_WITH_TIME_ZONE changed_at
-        VARCHAR changed_by
-        JSONB old_data
-        JSONB new_data
-    }
-
-    %% 関係性
-    WALLETS ||--o{ USER_ITEMS : "owns"
-    WALLETS ||--o{ USER_GACHA_STATES : "has state"
-    WALLETS ||--o{ GACHA_TRANSACTIONS : "executes"
-    ITEMS ||--o{ GACHA_EMISSIONS : "emitted by"
-    ITEMS ||--o{ USER_ITEMS : "owned as"
-    ITEMS ||--o{ GACHA_TRANSACTION_DETAILS : "obtained"
-    GACHA_POOLS ||--o{ GACHA_EMISSIONS : "contains"
-    GACHA_POOLS ||--o{ USER_GACHA_STATES : "tracked by"
-    GACHA_POOLS ||--o{ GACHA_TRANSACTIONS : "executed on"
-    GACHA_TRANSACTIONS ||--o{ GACHA_TRANSACTION_DETAILS : "contains"
-
+著者 / モチベーションAuthor: Emukei555 (17歳 / 高校2年生 / バックエンド志望)このプロジェクトは、生成AIがコードを書ける時代に**「なぜその設計にしたのか」を語れるエンジニア**になるための実験です。
+DDDを通じて、ドメインの意味をコードに落とし込み、AIの出力すら批判的に検証できる力を鍛えています。
 
