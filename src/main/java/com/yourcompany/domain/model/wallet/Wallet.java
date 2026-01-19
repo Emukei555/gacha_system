@@ -7,9 +7,17 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 
 import java.util.UUID;
 
+/**
+ * ユーザーの通貨（石）を管理する集約ルート (Aggregate Root)。
+ * <p>
+ * 有償石・無償石の残高管理、消費優先順位（有償優先）のロジック、
+ * および操作ログのトレーサビリティ（MDC）を担当します。
+ * </p>
+ */
 @Entity
 @Table(name = "wallets")
 @Getter
@@ -17,140 +25,202 @@ import java.util.UUID;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Wallet {
 
+    private static final String MDC_KEY_USER_ID = "userId";
+    private static final String MDC_KEY_OPERATION = "operation";
+
     @Id
     @Column(name = "user_id")
     private UUID userId;
 
-    // 1. intではなくMoney型で持つ。
-    // DBのカラム名(paid_stones)とMoneyのフィールド名(amount)が違うため、@AttributeOverrideで紐付ける
-    @Embedded
-    @AttributeOverride(name = "amount", column = @Column(name = "paid_stones", nullable = false))
-    private Money paidMoney;
+    @Column(name = "paid_stones", nullable = false)
+    private int paidStones;
 
-    @Embedded
-    @AttributeOverride(name = "amount", column = @Column(name = "free_stones", nullable = false))
-    private Money freeMoney;
+    @Column(name = "free_stones", nullable = false)
+    private int freeStones;
 
     @Version
     private long version;
 
-    // コンストラクタ: 生成時は必ず0円で初期化
-    private Wallet(UUID userId) {
+    private Wallet(UUID userId, int paidStones, int freeStones) {
         this.userId = userId;
-        this.paidMoney = Money.zero();
-        this.freeMoney = Money.zero();
-    }
-
-    public static Wallet create(UUID userId) {
-        return new Wallet(userId);
+        this.paidStones = paidStones;
+        this.freeStones = freeStones;
     }
 
     /**
-     * 石を消費する
-     * ロジック：有償(Paid) -> 無償(Free) の順に消費
+     * 新規ウォレットを作成します。
+     *
+     * @param userId ユーザーID
+     * @return 初期状態（残高0）の {@link Wallet}
+     */
+    public static Wallet create(UUID userId) {
+        return new Wallet(userId, 0, 0);
+    }
+
+    /**
+     * 石を消費します (Railway Oriented Style)。
+     * <p>
+     * 以下のステップで処理を実行します：
+     * <ol>
+     * <li>引数チェック (正の数であるか)</li>
+     * <li>残高チェック (不足していないか)</li>
+     * <li>消費ロジック実行 (有償石 -> 無償石の順に消費)</li>
+     * <li>ログ出力 (成功/失敗)</li>
+     * </ol>
+     * 処理中は {@link MDC} にコンテキスト情報を設定し、ログの追跡性を確保します。
+     * </p>
+     *
+     * @param amount 消費する石の量
+     * @return 処理結果。成功時は更新後の {@link Wallet}、失敗時はエラー情報を含む {@link Result}
      */
     public Result<Wallet> consume(int amount) {
-        // 1. 入力値の型変換とバリデーション
-        // Money.ofがResultを返すようになったので、ここでもResultで受ける
-        Result<Money> costResult = Money.of(amount);
-        if (costResult instanceof Result.Failure<Money> f) {
-            return Result.failure(f.errorCode(), f.message());
+        setupMDC("consume");
+
+        try {
+            return validateAmountPositive(amount)                    // 1. 引数チェック
+                    .flatMap(this::validateBalanceSufficient)        // 2. 残高チェック
+                    .tap(amt -> log.debug("Consuming stones. amount={}", amt)) // 3. 実行前ログ
+                    .map(this::executeConsumeLogic)                  // 4. 計算と状態更新
+                    .tap(wallet -> log.info("Wallet updated. consumed={}, newPaid={}, newFree={}",
+                            amount, wallet.paidStones, wallet.freeStones)) // 5. 完了ログ
+                    // 失敗時のログ：エラー内容をWARNで記録
+                    .tapFailure(failure -> log.warn("Consume failed. code={}, message={}",
+                            failure.errorCode(), failure.message()));
+        } finally {
+            clearMDC();
         }
-        // 中身を取り出す（成功確定）
-        Money cost = ((Result.Success<Money>) costResult).value();
+    }
 
-        // 2. 残高チェック (有償 + 無償)
-        // addもResultを返すため、オーバーフロー(Long超え)もここで検知可能
-        Result<Money> totalResult = this.paidMoney.add(this.freeMoney);
+    // --- Private Helper Methods for ROP ---
 
-        switch (totalResult) {
-            case Result.Failure<Money> f -> {
-                // 合算でオーバーフローなどの異常
-                return Result.failure(f.errorCode(), f.message());
-            }
-            case Result.Success<Money> s -> {
-                Money total = s.value();
-                if (total.isLessThan(cost)) {
-                    // 残高不足: 詳細な不足額を返すことも可能
-                    return Result.failure(GachaErrorCode.INSUFFICIENT_BALANCE);
-                }
-            }
+    /**
+     * ガード節: 消費量が正の数であることを検証します。
+     *
+     * @param amount 検証対象の量
+     * @return 検証結果
+     */
+    private Result<Integer> validateAmountPositive(int amount) {
+        if (amount < 0) {
+            log.warn("Validation failed: Amount must be positive. input={}", amount);
+            return Result.failure(GachaErrorCode.INVALID_PARAMETER, "消費量は正の数である必要があります");
         }
-
-        // ログ: 変更前のスナップショット
-        log.debug("Consuming stones. userId={}, currentPaid={}, currentFree={}, amount={}",
-                userId, paidMoney.amount(), freeMoney.amount(), amount);
-
-        // 3. 消費ロジック
-        // ここまでくれば計算は安全だが、MoneyがResultを返すためハンドリングが必要
-
-        // A. 有償石からの消費分を計算 (minは失敗しないロジックなのでMoney返しでOK)
-        Money paidConsumption = this.paidMoney.min(cost);
-
-        // B. 残りの消費分を計算
-        // subtractはResultを返すが、ロジック上マイナスにならないことが保証されているため
-        // ここで万が一Failureが出たら「システムバグ（あり得ない状態）」として例外を投げて良い
-        Money remainingConsumption = unwrapSuccess(cost.subtract(paidConsumption));
-
-        // C. 実際の減算適用
-        // 有償石を減らす
-        this.paidMoney = unwrapSuccess(this.paidMoney.subtract(paidConsumption));
-        // 無償石を減らす
-        this.freeMoney = unwrapSuccess(this.freeMoney.subtract(remainingConsumption));
-
-        // ログ: 変更確定
-        log.info("Wallet updated. userId={}, consumed={}, newPaid={}, newFree={}",
-                userId, amount, this.paidMoney.amount(), this.freeMoney.amount());
-
-        return Result.success(this);
+        return Result.success(amount);
     }
 
     /**
-     * 石を付与する
+     * ガード節: 残高が消費量に対して十分であることを検証します。
+     *
+     * @param amount 消費量
+     * @return 検証結果
+     */
+    private Result<Integer> validateBalanceSufficient(int amount) {
+        long total = getTotalStones();
+        if (total < (long) amount) {
+            log.warn("Validation failed: Insufficient balance. total={}, required={}", total, amount);
+            return Result.failure(GachaErrorCode.INSUFFICIENT_BALANCE);
+        }
+        return Result.success(amount);
+    }
+
+    /**
+     * 実際の消費ロジックを実行し、内部状態を更新します。
+     * <p>
+     * バリデーション通過後に呼び出される前提のため、エラーチェックは行いません。
+     * 有償石を優先して消費し、不足分を無償石から消費します。
+     * </p>
+     *
+     * @param amount 消費量
+     * @return 更新された {@link Wallet} (this)
+     */
+    private Wallet executeConsumeLogic(int amount) {
+        int remaining = amount;
+        int paidConsume = Math.min(this.paidStones, remaining);
+        this.paidStones -= paidConsume;
+        remaining -= paidConsume;
+
+        if (remaining > 0) {
+            this.freeStones -= remaining;
+        }
+        return this;
+    }
+
+    /**
+     * 石を付与します。
+     * <p>
+     * 有償石と無償石を個別に指定して追加します。所持上限チェックを行い、
+     * 上限を超える場合はエラーを返します。
+     * </p>
+     *
+     * @param paidAmount 付与する有償石の量
+     * @param freeAmount 付与する無償石の量
+     * @return 処理結果
      */
     public Result<Wallet> deposit(int paidAmount, int freeAmount) {
-        // 1. 入力値チェック (Money生成)
-        Result<Money> paidInput = Money.of(paidAmount);
-        Result<Money> freeInput = Money.of(freeAmount);
+        setupMDC("deposit");
 
-        if (paidInput instanceof Result.Failure<Money> f) return Result.failure(f.errorCode(), f.message());
-        if (freeInput instanceof Result.Failure<Money> f) return Result.failure(f.errorCode(), f.message());
-
-        Money addPaid = ((Result.Success<Money>) paidInput).value();
-        Money addFree = ((Result.Success<Money>) freeInput).value();
-
-        // 2. 加算処理 (Resultによるオーバーフローチェック)
-        Result<Money> newPaidResult = this.paidMoney.add(addPaid);
-        Result<Money> newFreeResult = this.freeMoney.add(addFree);
-
-        // どちらかで失敗（オーバーフロー）したら失敗を返す
-        if (newPaidResult instanceof Result.Failure<Money> f) {
-            return Result.failure(GachaErrorCode.INVENTORY_OVERFLOW, "有償石が所持上限を超えます");
+        try {
+            return validateAmountPositive(paidAmount)
+                    .flatMap(ok -> validateAmountPositive(freeAmount))
+                    .flatMap(ok -> validateCapacity(paidAmount, freeAmount))
+                    .tap(ok -> log.debug("Depositing stones. paid={}, free={}", paidAmount, freeAmount))
+                    .map(ok -> {
+                        this.paidStones += paidAmount;
+                        this.freeStones += freeAmount;
+                        return this;
+                    })
+                    .tap(wallet -> log.info("Wallet deposited. addPaid={}, addFree={}, total={}",
+                            paidAmount, freeAmount, getTotalStones()))
+                    // 失敗時のログ
+                    .tapFailure(failure -> log.warn("Deposit failed. code={}, message={}",
+                            failure.errorCode(), failure.message()));
+        } finally {
+            clearMDC();
         }
-        if (newFreeResult instanceof Result.Failure<Money> f) {
-            return Result.failure(GachaErrorCode.INVENTORY_OVERFLOW, "無償石が所持上限を超えます");
-        }
-
-        // 3. 確定更新
-        this.paidMoney = ((Result.Success<Money>) newPaidResult).value();
-        this.freeMoney = ((Result.Success<Money>) newFreeResult).value();
-
-        return Result.success(this);
-    }
-
-    public long getTotalStones() {
-        // ここは計算用なのでlongで返す
-        return (long) paidMoney.amount() + freeMoney.amount();
     }
 
     /**
-     * 内部ヘルパー: 論理的に失敗しないはずのResultをアンラップする
-     * 万が一失敗した場合は、ドメインの不整合（バグ）なので実行時例外を投げる
+     * ガード節: 付与後の合計が所持上限（Integer.MAX_VALUE）を超えないか検証します。
+     *
+     * @param paidAdd 有償石の追加量
+     * @param freeAdd 無償石の追加量
+     * @return 検証結果
      */
-    private Money unwrapSuccess(Result<Money> result) {
-        return switch (result) {
-            case Result.Success<Money> s -> s.value();
-            case Result.Failure<Money> f -> throw new IllegalStateException("Logic Error: " + f.message());
-        };
+    private Result<Void> validateCapacity(int paidAdd, int freeAdd) {
+        if ((long)this.paidStones + paidAdd > Integer.MAX_VALUE ||
+                (long)this.freeStones + freeAdd > Integer.MAX_VALUE) {
+            log.error("Validation failed: Capacity overflow. currentPaid={}, addPaid={}, currentFree={}, addFree={}",
+                    paidStones, paidAdd, freeStones, freeAdd);
+            return Result.failure(GachaErrorCode.INVENTORY_OVERFLOW, "所持上限を超えます");
+        }
+        return Result.success(null);
+    }
+
+    /**
+     * 現在の合計所持石数（有償＋無償）を取得します。
+     *
+     * @return 合計石数
+     */
+    public long getTotalStones() {
+        return (long) paidStones + freeStones;
+    }
+
+    // --- MDC Helper Methods ---
+
+    /**
+     * MDC (Mapped Diagnostic Context) にログ追跡用の情報を設定します。
+     *
+     * @param operation 操作名
+     */
+    private void setupMDC(String operation) {
+        MDC.put(MDC_KEY_USER_ID, this.userId.toString());
+        MDC.put(MDC_KEY_OPERATION, operation);
+    }
+
+    /**
+     * MDC から情報を削除し、スレッドプールの汚染を防ぎます。
+     */
+    private void clearMDC() {
+        MDC.remove(MDC_KEY_USER_ID);
+        MDC.remove(MDC_KEY_OPERATION);
     }
 }

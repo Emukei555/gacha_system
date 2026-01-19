@@ -64,11 +64,11 @@ class WalletTest {
 
             Wallet updatedWallet = result.unwrap();
 
-            // Money型を経由して値を確認 (Money.amount()を使用)
-            assertThat(updatedWallet.getPaidMoney().amount()).isEqualTo(0);
-            assertThat(updatedWallet.getFreeMoney().amount()).isEqualTo(300);
+            // Money型ではなく、現在のWallet実装(int)に合わせてGetterを使用
+            assertThat(updatedWallet.getPaidStones()).isEqualTo(0);
+            assertThat(updatedWallet.getFreeStones()).isEqualTo(300);
 
-            // 合計値のヘルパーメソッドがある場合はそちらも確認
+            // 合計値の確認
             assertThat(updatedWallet.getTotalStones()).isEqualTo(300L);
         }
     }
@@ -78,7 +78,7 @@ class WalletTest {
     class DepositTest {
 
         @Test
-        @DisplayName("【異常系】付与後の合計が int 上限を超える場合、INVENTORY_OVERFLOW を返すこと")
+        @DisplayName("【異常系】付与後の合計が int 上限を超える場合、エラーを返すこと")
         void shouldReturnErrorWhenOverflow() {
             // Given: ほぼ上限に近い石を持つウォレット (Integer.MAX_VALUE - 100)
             Wallet wallet = Wallet.create(userId);
@@ -87,11 +87,11 @@ class WalletTest {
             // When: さらに200石付与しようとする -> オーバーフロー
             Result<Wallet> result = wallet.deposit(200, 0);
 
-            // Then: Failure であり、エラーコードは INVENTORY_OVERFLOW
+            // Then: Failure であること
             assertThat(result).isInstanceOf(Result.Failure.class);
             Result.Failure<Wallet> failure = (Result.Failure<Wallet>) result;
 
-            // Moneyクラスの実装に合わせて INVENTORY_OVERFLOW を期待する
+            // もしWallet側を INVENTORY_OVERFLOW に修正済みならこちら：
             assertThat(failure.errorCode()).isEqualTo(GachaErrorCode.INVENTORY_OVERFLOW);
         }
 
@@ -105,9 +105,9 @@ class WalletTest {
             assertThat(result).isInstanceOf(Result.Success.class);
 
             Wallet w = result.unwrap();
-            // Money経由で確認
-            assertThat(w.getPaidMoney().amount()).isEqualTo(100);
-            assertThat(w.getFreeMoney().amount()).isEqualTo(200);
+            // intフィールドの確認
+            assertThat(w.getPaidStones()).isEqualTo(100);
+            assertThat(w.getFreeStones()).isEqualTo(200);
             assertThat(w.getTotalStones()).isEqualTo(300L);
         }
     }
