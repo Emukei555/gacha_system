@@ -2,18 +2,24 @@ package com.yourcompany.domain.model.wallet;
 
 import com.yourcompany.domain.shared.exception.GachaErrorCode;
 import com.yourcompany.domain.shared.result.Result;
+import jakarta.persistence.Embeddable;
+import lombok.extern.slf4j.Slf4j;
+
+import java.io.Serializable;
 
 /**
  * 通貨（石）の量を表す Value Object
  * - 不変条件: 値は常に0以上であること
  * - 副作用: なし（計算は常に新しいインスタンスを返す）
  */
-public record Money(int amount) {
+@Embeddable
+@Slf4j
+public record Money(int amount) implements Serializable {
 
     // 1. コンパクトコンストラクタ (不変条件の最終防衛ライン)
-    // ここは「バグ」レベルの不正を防ぐために例外のままで良い（通常はFactory経由で呼ばれるため）
     public Money {
         if (amount < 0) {
+            // ここは開発時のバグ検知用なので例外で落とす
             throw new IllegalArgumentException("Money cannot be negative: " + amount);
         }
     }
@@ -25,6 +31,7 @@ public record Money(int amount) {
      */
     public static Result<Money> of(int amount) {
         if (amount < 0) {
+            log.warn("Money creation failed. Negative amount: {}", amount);
             return Result.failure(GachaErrorCode.INVALID_PARAMETER, "金額は0以上である必要があります");
         }
         return Result.success(new Money(amount));
@@ -41,10 +48,11 @@ public record Money(int amount) {
      * オーバーフロー時は Failure を返す
      */
     public Result<Money> add(Money other) {
-        // オーバーフローチェック
+        // オーバーフローチェック (longで計算して比較)
         if ((long) this.amount + other.amount > Integer.MAX_VALUE) {
-            // システムエラー、またはビジネス的な上限エラーとして返す
-            return Result.failure(GachaErrorCode.INTERNAL_ERROR, "所持上限を超えています (Overflow)");
+            log.warn("Money overflow detected: {} + {}", this.amount, other.amount);
+            // WalletTestに合わせて INVENTORY_OVERFLOW を返す
+            return Result.failure(GachaErrorCode.INVENTORY_OVERFLOW, "所持上限を超えています (Overflow)");
         }
         return Result.success(new Money(this.amount + other.amount));
     }
@@ -55,6 +63,7 @@ public record Money(int amount) {
      */
     public Result<Money> subtract(Money other) {
         if (this.amount < other.amount) {
+            log.warn("Money subtraction failed (Insufficient). Current: {}, Reduce: {}", this.amount, other.amount);
             // 明示的に「残高不足」のエラーを返す
             return Result.failure(GachaErrorCode.INSUFFICIENT_BALANCE);
         }
@@ -78,4 +87,6 @@ public record Money(int amount) {
     public Money min(Money other) {
         return this.amount <= other.amount ? this : other;
     }
+
+    // toStringはRecord標準のもので十分ですが、必要ならログ用にオーバーライドしても可
 }

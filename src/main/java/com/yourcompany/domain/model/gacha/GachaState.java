@@ -69,25 +69,29 @@ public class GachaState {
             return GachaErrorCode.INVALID_PARAMETER.toFailure("Pity ceiling must be non-negative");
         }
 
-        int previousPity = this.currentPityCount;
-        int previousGuaranteed = this.currentGuaranteedCount;
+        int previousPity = Math.max(0, this.currentPityCount); // 不整合ガード
+        int previousGuaranteed = Math.max(0, this.currentGuaranteedCount);
 
-        int nextPity = previousPity;
-        int nextGuaranteed = previousGuaranteed;
+        int nextPity;
+        int nextGuaranteed;
 
         if (isSsrEmitted) {
             nextPity = 0;
             nextGuaranteed = 0;
             log.info("SSR emitted. Resetting counters. userId={}, poolId={}", userId, gachaPoolId);
         } else {
-            nextPity += 1;
-            nextGuaranteed += 1;
+            nextPity = previousPity + 1;
+            nextGuaranteed = previousGuaranteed + 1;
         }
 
-        // Safety Guard: 天井設定を超えないようキャップ
-        nextPity = Math.min(nextPity, pityCeiling);
+        // Safety Guard: 天井設定（> 0）がある場合のみキャップする。0の場合は青天井。
+        if (pityCeiling > 0 && nextPity > pityCeiling) {
+            log.debug("Pity count reached ceiling and capped. userId={}, poolId={}, count={}",
+                    userId, gachaPoolId, nextPity);
+            nextPity = pityCeiling;
+        }
 
-        // 状態更新 (JPA管理下のEntityのため、フィールドを直接更新する)
+        // 状態更新
         this.currentPityCount = nextPity;
         this.currentGuaranteedCount = nextGuaranteed;
 
@@ -101,6 +105,7 @@ public class GachaState {
      * 次の1回が「天井確定」かどうかを判定する
      */
     public boolean isPityReached(int ceilingCount) {
+        // 天井なし(0以下)の場合は常にfalse
         if (ceilingCount <= 0) {
             return false;
         }

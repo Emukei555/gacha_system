@@ -36,17 +36,17 @@ class WalletTest {
         @Test
         @DisplayName("【異常系】マイナスの値を消費しようとした場合、INVALID_PARAMETER を返すこと")
         void shouldReturnErrorWhenAmountIsNegative() {
-            // Given: 1000石あるウォレット
+            // Given
             Wallet wallet = Wallet.create(userId);
-            wallet.deposit(1000, 0);
+            // 初期残高セット（失敗したら即落ちるようunwrap使用）
+            wallet.deposit(1000, 0).unwrap();
 
             // When: -1石消費しようとする
             Result<Wallet> result = wallet.consume(-1);
 
             // Then: Failure であり、INVALID_PARAMETER であること
             assertThat(result).isInstanceOf(Result.Failure.class);
-            Result.Failure<Wallet> failure = (Result.Failure<Wallet>) result;
-            assertThat(failure.errorCode()).isEqualTo(GachaErrorCode.INVALID_PARAMETER);
+            assertThat(((Result.Failure<?>) result).errorCode()).isEqualTo(GachaErrorCode.INVALID_PARAMETER);
         }
 
         @Test
@@ -54,16 +54,22 @@ class WalletTest {
         void shouldConsumePaidStonesFirst() {
             // Given: 有償1000石、無償500石
             Wallet wallet = Wallet.create(userId);
-            wallet.deposit(1000, 500);
+            wallet.deposit(1000, 500).unwrap();
 
-            // When: 1200石消費 (有償1000 + 無償200 消費)
+            // When: 1200石消費 (有償1000全額 + 無償200 消費)
             Result<Wallet> result = wallet.consume(1200);
 
             // Then: Success であり、残高が正確であること
             assertThat(result).isInstanceOf(Result.Success.class);
-            Wallet updatedWallet = ((Result.Success<Wallet>) result).value();
-            assertThat(updatedWallet.getPaidStones()).isEqualTo(0);
-            assertThat(updatedWallet.getFreeStones()).isEqualTo(300);
+
+            Wallet updatedWallet = result.unwrap();
+
+            // Money型を経由して値を確認 (Money.amount()を使用)
+            assertThat(updatedWallet.getPaidMoney().amount()).isEqualTo(0);
+            assertThat(updatedWallet.getFreeMoney().amount()).isEqualTo(300);
+
+            // 合計値のヘルパーメソッドがある場合はそちらも確認
+            assertThat(updatedWallet.getTotalStones()).isEqualTo(300L);
         }
     }
 
@@ -72,19 +78,21 @@ class WalletTest {
     class DepositTest {
 
         @Test
-        @DisplayName("【異常系】付与後の合計が int 上限を超える場合、INTERNAL_ERROR を返すこと")
-        void shouldReturnErrorWhenBalanceExceedsMaxInt() {
-            // Given: ほぼ上限に近い石を持つウォレット
+        @DisplayName("【異常系】付与後の合計が int 上限を超える場合、INVENTORY_OVERFLOW を返すこと")
+        void shouldReturnErrorWhenOverflow() {
+            // Given: ほぼ上限に近い石を持つウォレット (Integer.MAX_VALUE - 100)
             Wallet wallet = Wallet.create(userId);
-            wallet.deposit(Integer.MAX_VALUE - 10, 0);
+            wallet.deposit(Integer.MAX_VALUE - 100, 0).unwrap();
 
-            // When: さらに100石付与しようとする
-            Result<Wallet> result = wallet.deposit(100, 0);
+            // When: さらに200石付与しようとする -> オーバーフロー
+            Result<Wallet> result = wallet.deposit(200, 0);
 
-            // Then: Failure であること
+            // Then: Failure であり、エラーコードは INVENTORY_OVERFLOW
             assertThat(result).isInstanceOf(Result.Failure.class);
             Result.Failure<Wallet> failure = (Result.Failure<Wallet>) result;
-            assertThat(failure.errorCode()).isEqualTo(GachaErrorCode.INTERNAL_ERROR);
+
+            // Moneyクラスの実装に合わせて INVENTORY_OVERFLOW を期待する
+            assertThat(failure.errorCode()).isEqualTo(GachaErrorCode.INVENTORY_OVERFLOW);
         }
 
         @Test
@@ -95,9 +103,12 @@ class WalletTest {
             Result<Wallet> result = wallet.deposit(100, 200);
 
             assertThat(result).isInstanceOf(Result.Success.class);
-            Wallet w = ((Result.Success<Wallet>) result).value();
-            assertThat(w.getPaidStones()).isEqualTo(100);
-            assertThat(w.getFreeStones()).isEqualTo(200);
+
+            Wallet w = result.unwrap();
+            // Money経由で確認
+            assertThat(w.getPaidMoney().amount()).isEqualTo(100);
+            assertThat(w.getFreeMoney().amount()).isEqualTo(200);
+            assertThat(w.getTotalStones()).isEqualTo(300L);
         }
     }
 }

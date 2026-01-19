@@ -1,4 +1,4 @@
-package com.yourcompany.domain.model.gacha;
+package com.yourcompany.domain.model.inventory;
 
 import com.yourcompany.domain.shared.exception.GachaErrorCode;
 import com.yourcompany.domain.shared.result.Result;

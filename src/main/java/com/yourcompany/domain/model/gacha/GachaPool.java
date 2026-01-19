@@ -70,7 +70,7 @@ public class GachaPool {
         if (costAmount <= 0) {
             return GachaErrorCode.INVALID_PARAMETER.toFailure("コストは1以上である必要があります");
         }
-        if (pityCeilingCount <= 0) {
+        if (pityCeilingCount < 0) {
             return GachaErrorCode.INVALID_PARAMETER.toFailure("天井回数は0以上である必要があります");
         }
         // 2. 期間チェック (Start < End)
