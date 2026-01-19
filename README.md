@@ -7,7 +7,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue?logo=postgresql)](https://www.postgresql.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## 目次
+## 📖 目次
 - [プロジェクト概要](#プロジェクト概要)
 - [なぜDDDなのか？ – AI時代に求められる本質](#なぜdddなのか--ai時代に求められる本質)
 - [設計思想 & アーキテクチャ](#設計思想--アーキテクチャ)
@@ -18,7 +18,7 @@
 - [現在のステータス](#現在のステータス)
 - [著者 / モチベーション](#著者--モチベーション)
 
-## プロジェクト概要
+## 🚀 プロジェクト概要
 
 本プロジェクトは、**Domain-Driven Design (DDD)** を徹底的に実践したソーシャルゲーム向けガチャシステムのバックエンドです。  
 単なる機能実装ではなく、以下のDDDの核心をコードで体現することを目的としています：
@@ -31,20 +31,20 @@
 生成AIがコードを爆速で書ける時代に**「AIが出せないドメイン設計力」** が差別化の鍵になると考えています。  
 このシステムは、金融システム並みのデータ整合性を目指し、保守性の高いコードベースを構築しています。
 
-## なぜDDDなのか？ – AI時代に求められる本質
+## 💡 なぜDDDなのか？ – AI時代に求められる本質
 
 - AIはCRUDやテンプレートコードを完璧に生成するが、**「ビジネス文脈を読み取り、不変条件をコードに落とし込む」** ことはまだ苦手。
 - DDDは**「ドメインを深く理解し、モデル化する力」** を要求する → これこそAIに代替されにくいスキル。
 - 本プロジェクトは、**「なぜこの設計にしたのか」を常に語れるエンジニアになるための訓練場** です。  
   特に、ガチャの「天井カウント」「優先消費ルール」「排出確率の整合性」といった複雑なビジネスルールを、DDDの集約と値オブジェクトで表現しています。
 
-## 設計思想 & アーキテクチャ
+## 🏗️ 設計思想 & アーキテクチャ
 
 ### 1. DDDの核心を実践
-- **集約（Aggregate）**：`GachaState`、`Wallet` などのルートエンティティ内で状態遷移と不変条件を完結。集約の境界を明確にし、トランザクションの範囲を最小化。
-- **値オブジェクト（Value Object）**：`Gems`、`Money`、`RequestId` などで型安全 + 不変性を確保。負値やオーバーフローをコンパイルレベルで防ぐ。
-- **ユビキタス言語**：メソッド名・クラス名にドメイン語をそのまま反映（`updateState`, `isPityReached`, `consume` など）。ビジネス側との共通言語をコードに反映。
-- **防御的ドメイン設計**：DBレイヤー（CHECK制約・トリガー）とコードレイヤー（ガード節）の両面で不変条件を保護。
+- **集約 (Aggregate)**: `GachaState`、`Wallet` などのルートエンティティ内で状態遷移と不変条件を完結。集約の境界を明確にし、トランザクションの範囲を最小化。
+- **値オブジェクト (Value Object)**: `Gems`、`Money`、`RequestId` などで型安全 + 不変性を確保。負値やオーバーフローをコンパイルレベルで防ぐ。
+- **ユビキタス言語**: メソッド名・クラス名にドメイン語をそのまま反映（`updateState`, `isPityReached`, `consume` など）。ビジネス側との共通言語をコードに反映。
+- **防御的ドメイン設計**: DBレイヤー（CHECK制約・トリガー）とコードレイヤー（ガード節）の両面で不変条件を保護。
 
 ### 2. Railway Oriented Error Handling (Resultパターン)
 例外による制御フローを避け、失敗を値として明示的に扱う。DDDの不変条件違反を型安全に伝播。
@@ -76,7 +76,8 @@ public Result<GachaState> updateState(boolean isSsrEmitted, GachaPool pool) {
     return Result.success(this);
 }
 ```
-主要ドメインモデル（DDD視点）Gems (Value Object)
+
+ 主要ドメインモデル（DDD視点）Gems (Value Object)
 有償/無償の優先消費ルールをカプセル化。負値・オーバーフロー防止。
 GachaState (Aggregate Root)
 ユーザーごとの天井・確定枠進捗を管理。状態遷移をEntity内で完結。
@@ -87,7 +88,7 @@ InventoryItem (Entity)
 RequestId (Value Object)
 冪等性キー（UUID v7）でログ追跡・重複防止。
 
-（詳細なER図は以下を参照）ER図mermaid
+ ER図詳細なER図は以下の通りです。DDDの集約境界を考慮したテーブル設計を採用しています。mermaid
 ``` mermaid
 erDiagram
     %% ==========================================
@@ -186,16 +187,16 @@ erDiagram
     %% Transaction Connections (Logical FKs in partitioning)
     wallets ||--o{ gacha_transactions : "実行ログ"
     gacha_pools ||--o{ gacha_transactions : "実行プール"
-``` 
+```
+## 技術スタックLanguage: 
+- Java 21 (record, sealed interface, pattern matching)
+- Framework: Spring Boot 4.0.1
+- Database: PostgreSQL (with Stored Procedures, Triggers, CHECK Constraints)
+- Architecture: Domain-Driven Design (DDD) / Hexagonal Architecture
+- Error Handling: Result Pattern (Railway Oriented Programming)
+- Concurrency: Java 21 Virtual Threads
 
-技術スタックLanguage: Java 21 (record, sealed interface, pattern matching)
-Framework: Spring Boot 4.0.1
-Database: PostgreSQL (with Stored Procedures, Triggers, CHECK Constraints)
-Architecture: Domain-Driven Design (DDD) / Hexagonal Architecture
-Error Handling: Result Pattern (Railway Oriented Programming)
-Java 21 Virtual Threads
-
-セットアップ & 実行前提条件: Docker & Docker Compose, JDK 21bash
+ セットアップ & 実行前提条件: Docker & Docker Compose, JDK 21bash
 
 # 1. リポジトリのクローン
 git clone https://github.com/Emukei555/gacha_system.git
@@ -207,12 +208,12 @@ docker-compose up -d
 # 3. アプリケーションのビルド & 起動
 ./gradlew bootRun
 
-現在のステータス (WIP)Core Domain: Wallet, Money, RequestId, GachaState
+ 現在のステータス (WIP)Core Domain: Wallet, Money, RequestId, GachaState
 Shared Kernel: Result<T>, ErrorCode
 Application Service: ガチャ実行トランザクション
 API Layer: REST Controller
 Infrastructure: Repository Impl
 
-著者 / モチベーションAuthor: Emukei555 (17歳 / 高校2年生 / バックエンド志望)このプロジェクトは、生成AIがコードを書ける時代に**「なぜその設計にしたのか」を語れるエンジニア**になるための実験です。
-DDDを通じて、ドメインの意味をコードに落とし込み、AIの出力すら批判的に検証できる力を鍛えています。
+ 著者 / モチベーションAuthor: Emukei555 (17歳 / 高校2年生 / バックエンド志望)このプロジェクトは、生成AIがコードを書ける時代に**「なぜその設計にしたのか」を語れるエンジニア**になるための実験です。
+DDDを通じて、ドメインの意味をコードに落とし込み、AIの出力すら批判的に検証できる力を 鍛えています。
 
