@@ -3,11 +3,13 @@ package com.yourcompany.schoolasset.application.service;
 import com.yourcompany.domain.model.gacha.WeightedItem;
 import com.yourcompany.domain.shared.exception.GachaErrorCode;
 import com.yourcompany.domain.shared.result.Result;
+import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.util.List;
 import java.util.random.RandomGenerator;
 
+@Service
 public class LotteryService {
 
     private final RandomGenerator random = new SecureRandom();

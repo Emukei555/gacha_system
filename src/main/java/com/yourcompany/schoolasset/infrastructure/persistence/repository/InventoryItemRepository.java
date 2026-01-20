@@ -1,6 +1,6 @@
 package com.yourcompany.schoolasset.infrastructure.persistence.repository;
 
-import com.yourcompany.domain.model.gacha.GachaPool;
+import com.yourcompany.domain.model.inventory.InventoryItem;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -10,8 +10,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Repository
-public interface GachaPoolRepository extends JpaRepository<GachaPool, UUID> {
-
-    @Query("SELECT p FROM GachaPool p LEFT JOIN FETCH p.emissions WHERE p.id = :id")
-    Optional<GachaPool> findByIdWithEmissions(@Param("id") UUID id);
+public interface InventoryItemRepository extends JpaRepository<InventoryItem, UUID> {
+    @Query("SELECT i FROM InventoryItem i WHERE i.userId = :userId AND i.itemId = :itemId")
+    Optional<InventoryItem> findByUserAndItem(@Param("userId") UUID userId, @Param("itemId") UUID itemId);
 }
