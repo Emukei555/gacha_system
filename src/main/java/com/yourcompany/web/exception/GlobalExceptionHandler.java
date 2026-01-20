@@ -1,5 +1,8 @@
 package com.yourcompany.web.exception;
 
+// ★重要: ライブラリのインターフェースをインポート
+import com.sqlcanvas.sharedkernel.shared.error.ErrorCode;
+
 import com.yourcompany.domain.shared.exception.GachaErrorCode;
 import com.yourcompany.domain.shared.exception.GachaException;
 import com.yourcompany.web.dto.ErrorResponse;
@@ -8,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -22,13 +24,12 @@ public class GlobalExceptionHandler {
 
     /**
      * 1. ドメイン層で意図的に投げられたビジネス例外 (GachaException)
-     * Result型で処理しきれなかった、あるいは強制中断させたエラー
      */
     @ExceptionHandler(GachaException.class)
     public ResponseEntity<ErrorResponse> handleGachaException(GachaException ex, HttpServletRequest request) {
-        GachaErrorCode errorCode = ex.getErrorCode();
+        // ★修正ポイント: GachaErrorCode型 ではなく、より広い ErrorCode型 で受け取る
+        ErrorCode errorCode = ex.getErrorCode();
 
-        // 意図したエラーなので WARN レベルでログ出力
         log.warn("Business Exception: code={}, message={}, path={}",
                 errorCode.getCode(), ex.getMessage(), request.getRequestURI());
 
@@ -38,11 +39,9 @@ public class GlobalExceptionHandler {
 
     /**
      * 2. バリデーションエラー (@Valid / @Validated)
-     * 入力値がおかしい場合（400 Bad Request）
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationException(MethodArgumentNotValidException ex) {
-        // エラー詳細をリスト化
         List<ErrorResponse.ValidationError> details = ex.getBindingResult().getFieldErrors().stream()
                 .map(fieldError -> new ErrorResponse.ValidationError(
                         fieldError.getField(),
@@ -52,7 +51,6 @@ public class GlobalExceptionHandler {
 
         log.warn("Validation Error: count={}", details.size());
 
-        // バリデーションエラー用の共通コード（適宜 GachaErrorCode に追加してもOK）
         ErrorResponse body = new ErrorResponse(
                 "C001",
                 "入力内容に誤りがあります。",
@@ -62,7 +60,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 3. JSONパースエラー (Bodyが壊れている、型が違うなど)
+     * 3. JSONパースエラー
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleJsonException(HttpMessageNotReadableException ex) {
@@ -71,7 +69,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 4. 404 Not Found (URL間違いなど)
+     * 4. 404 Not Found
      */
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handle404(NoResourceFoundException ex) {
@@ -80,15 +78,13 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 5. その他の予期せぬエラー (NullPointerException, DB接続切れなど)
-     * ★ここが「最後の砦」です。スタックトレースはログに出し、ユーザーには汎用エラーを返します。
+     * 5. その他の予期せぬエラー
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpectedException(Exception ex, HttpServletRequest request) {
-        // 重大なエラーなので ERROR レベルでスタックトレースごとログ出力
         log.error("Unexpected System Error: path={}", request.getRequestURI(), ex);
 
-        // クライアントには詳細を見せず、GachaErrorCode.UNEXPECTED_ERROR の内容を返す
+        // ここは具体的なEnum (GachaErrorCode) を指定してOK
         GachaErrorCode internalError = GachaErrorCode.UNEXPECTED_ERROR;
 
         ErrorResponse body = new ErrorResponse(

@@ -1,10 +1,11 @@
 package com.yourcompany.schoolasset.application.service;
 
+import com.sqlcanvas.sharedkernel.shared.error.CommonErrorCode;
+import com.sqlcanvas.sharedkernel.shared.result.Result;
 import com.yourcompany.domain.model.gacha.*;
 import com.yourcompany.domain.model.wallet.Wallet;
 import com.yourcompany.domain.shared.exception.GachaErrorCode;
 import com.yourcompany.domain.shared.exception.GachaException;
-import com.yourcompany.domain.shared.result.Result;
 import com.yourcompany.schoolasset.infrastructure.persistence.repository.GachaPoolRepository;
 import com.yourcompany.schoolasset.infrastructure.persistence.repository.GachaStateRepository;
 import com.yourcompany.schoolasset.infrastructure.persistence.repository.WalletRepository;
@@ -103,19 +104,34 @@ class GachaServiceTest {
     }
 
     @Test
-    @DisplayName("【異常系】ウォレットが見つからない場合、例外をスローする")
-    void shouldThrowExceptionWhenWalletNotFound() {
+    @DisplayName("【異常系】ウォレットが見つからない場合、Failureを返す")
+    void shouldReturnFailureWhenWalletNotFound() {
         // Given
-        when(poolRepository.findByIdWithEmissions(poolId)).thenReturn(Optional.of(pool));
+        UUID userId = UUID.randomUUID();
+        GachaDto.DrawRequest request = new GachaDto.DrawRequest(UUID.randomUUID(), 1);
+
+        // プールは存在してOpenしている前提
+        GachaPool pool = mock(GachaPool.class);
         when(pool.isOpen()).thenReturn(true);
+        // ★削除: ここで pool.getId() や getCostAmount() を設定する必要はない
+        // (ウォレットチェックで落ちるため、それらのメソッドまで到達しないから)
+
+        when(poolRepository.findByIdWithEmissions(request.poolId())).thenReturn(Optional.of(pool));
+
+        // ウォレットが見つからない設定
         when(walletRepository.findByIdWithLock(userId)).thenReturn(Optional.empty());
 
-        // When & Then
-        assertThatThrownBy(() -> gachaService.drawGacha(userId, request))
-                .isInstanceOf(GachaException.class)
-                .extracting("errorCode").isEqualTo(GachaErrorCode.WALLET_NOT_FOUND);
-    }
+        // When
+        Result<GachaDto.DrawResponse> result = gachaService.drawGacha(userId, request);
 
+        // Then
+        assertThat(result).isInstanceOf(Result.Failure.class);
+
+        Result.Failure<?> failure = (Result.Failure<?>) result;
+        assertThat(failure.errorCode()).isEqualTo(GachaErrorCode.WALLET_NOT_FOUND);
+
+        verify(walletRepository, never()).save(any());
+    }
     @Test
     @DisplayName("【異常系】残高不足の場合、INSUFFICIENT_BALANCE エラーを返し、ロールバックをマークする")
     void shouldRollbackWhenBalanceInsufficient() {
@@ -152,14 +168,14 @@ class GachaServiceTest {
         GachaState state = mock(GachaState.class);
         when(stateRepository.findByUserAndPool(userId, poolId)).thenReturn(Optional.of(state));
 
-        when(lotteryService.draw(any())).thenReturn(Result.failure(GachaErrorCode.INTERNAL_ERROR));
+        when(lotteryService.draw(any())).thenReturn(Result.failure(CommonErrorCode.SYSTEM_ERROR));
 
         // When
         Result<GachaDto.DrawResponse> result = gachaService.drawGacha(userId, request);
 
         // Then
         assertThat(result).isInstanceOf(Result.Failure.class);
-        assertThat(((Result.Failure<?>) result).errorCode()).isEqualTo(GachaErrorCode.INTERNAL_ERROR);
+        assertThat(((Result.Failure<?>) result).errorCode()).isEqualTo(CommonErrorCode.SYSTEM_ERROR);
 
         verify(transactionStatus, times(1)).setRollbackOnly();
         verify(eventPublisher, never()).publishEvent(any());

@@ -1,7 +1,8 @@
 package com.yourcompany.domain.shared.value;
 
-import com.yourcompany.domain.shared.exception.GachaErrorCode;
-import com.yourcompany.domain.shared.result.Result;
+import com.sqlcanvas.sharedkernel.shared.error.CommonErrorCode; // 追加
+import com.sqlcanvas.sharedkernel.shared.result.Result; // 追加
+import com.sqlcanvas.sharedkernel.shared.util.RequestId; // パッケージ変更
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -12,34 +13,41 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RequestIdTest {
 
     @Test
-    @DisplayName("【正常系】generate() が有効なUUIDを生成すること")
-    void shouldGenerateValidUuid() {
-        RequestId id1 = RequestId.generate();
-        RequestId id2 = RequestId.generate();
+    @DisplayName("正常系: 有効なUUID文字列からRequestIdを生成できる")
+    void testValid() {
+        String uuidStr = UUID.randomUUID().toString();
+        Result<RequestId> result = RequestId.from(uuidStr);
 
-        assertThat(id1).isNotNull();
-        assertThat(id1.value()).isNotNull();
-        // 連続生成しても異なるIDであること
-        assertThat(id1).isNotEqualTo(id2);
+        assertThat(result).isInstanceOf(Result.Success.class);
+        assertThat(result.orElseThrow(failure -> new RuntimeException(failure.message())).toString()).isEqualTo(uuidStr);
     }
 
     @Test
-    @DisplayName("【異常系】from() に不正な文字列を渡すと INVALID_PARAMETER エラーになること")
-    void shouldFailFromInvalidString() {
-        String invalidUuid = "not-a-uuid-string";
-
+    @DisplayName("異常系: 不正なフォーマットの場合は失敗する")
+    void testInvalidFormat() {
+        String invalidUuid = "invalid-uuid-string";
         Result<RequestId> result = RequestId.from(invalidUuid);
 
         assertThat(result).isInstanceOf(Result.Failure.class);
-        assertThat(((Result.Failure<?>) result).errorCode()).isEqualTo(GachaErrorCode.INVALID_PARAMETER);
+        // GachaErrorCode -> CommonErrorCode に変更
+        assertThat(((Result.Failure<?>) result).errorCode()).isEqualTo(CommonErrorCode.INVALID_PARAMETER);
     }
 
     @Test
-    @DisplayName("【異常系】from() に空文字を渡すと INVALID_PARAMETER エラーになること")
-    void shouldFailFromEmptyString() {
+    @DisplayName("異常系: 空文字は許可しない")
+    void testEmpty() {
         Result<RequestId> result = RequestId.from("");
 
         assertThat(result).isInstanceOf(Result.Failure.class);
-        assertThat(((Result.Failure<?>) result).errorCode()).isEqualTo(GachaErrorCode.INVALID_PARAMETER);
+        assertThat(((Result.Failure<?>) result).errorCode()).isEqualTo(CommonErrorCode.INVALID_PARAMETER);
+    }
+
+    @Test
+    @DisplayName("正常系: 新規生成できる")
+    void testGenerate() {
+        RequestId requestId = RequestId.generate();
+        assertThat(requestId).isNotNull();
+        // UUIDとしてパースできるか確認
+        UUID.fromString(requestId.toString());
     }
 }

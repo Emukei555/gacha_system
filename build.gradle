@@ -23,9 +23,12 @@ configurations {
 
 repositories {
     mavenCentral()
+    mavenLocal()
 }
 
 dependencies {
+
+    implementation 'com.yourcompany:shared-kernel:0.0.1-SNAPSHOT'
     // --- Web API ---
     implementation 'org.springframework.boot:spring-boot-starter-web'
     // 入力チェック (@Valid)
@@ -35,6 +38,7 @@ dependencies {
 
     // --- DB接続 / 管理 ---
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     runtimeOnly 'org.postgresql:postgresql'
 
     // Flyway (DBマイグレーション)

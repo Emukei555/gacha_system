@@ -1,7 +1,7 @@
 package com.yourcompany.domain.model.history;
 
-import com.yourcompany.domain.shared.exception.GachaErrorCode;
-import com.yourcompany.domain.shared.result.Result;
+import com.sqlcanvas.sharedkernel.shared.error.CommonErrorCode;
+import com.sqlcanvas.sharedkernel.shared.result.Result;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -46,11 +46,13 @@ public class Item {
      */
     public static Result<Item> create(String name, String rarity, int maxCapacity) {
         if (name == null || name.isEmpty()) {
-            return GachaErrorCode.INVALID_PARAMETER.toFailure("アイテム名は必須です");
+            // 修正: メッセージを「アイテム名は必須です」に変更
+            return Result.failure(CommonErrorCode.INVALID_PARAMETER, "アイテム名は必須です");
         }
         if (maxCapacity <= 0) {
             log.warn("Invalid maxCapacity: {}", maxCapacity);
-            return GachaErrorCode.INVALID_PARAMETER.toFailure("所持上限は1以上である必要があります");
+            // 修正: メッセージを「所持上限は1以上〜」に変更
+            return Result.failure(CommonErrorCode.INVALID_PARAMETER, "所持上限は1以上である必要があります");
         }
         return Result.success(new Item(UUID.randomUUID(), name, rarity, maxCapacity));
     }

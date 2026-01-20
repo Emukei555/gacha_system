@@ -1,12 +1,11 @@
 package com.yourcompany.schoolasset.application.service;
 
+import com.sqlcanvas.sharedkernel.shared.result.Result;
+import com.sqlcanvas.sharedkernel.shared.util.RequestId; // ★新しいRequestId
 import com.yourcompany.domain.model.gacha.*;
 import com.yourcompany.domain.model.gacha.event.GachaDrawnEvent;
 import com.yourcompany.domain.model.wallet.Wallet;
 import com.yourcompany.domain.shared.exception.GachaErrorCode;
-import com.yourcompany.domain.shared.exception.GachaException;
-import com.yourcompany.domain.shared.result.Result;
-import com.yourcompany.domain.shared.value.RequestId;
 import com.yourcompany.schoolasset.infrastructure.persistence.repository.GachaPoolRepository;
 import com.yourcompany.schoolasset.infrastructure.persistence.repository.GachaStateRepository;
 import com.yourcompany.schoolasset.infrastructure.persistence.repository.WalletRepository;
@@ -31,19 +30,23 @@ public class GachaService {
     private final GachaPoolRepository poolRepository;
     private final GachaStateRepository stateRepository;
     private final LotteryService lotteryService;
-    private final ApplicationEventPublisher eventPublisher; // イベント発行用
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public Result<GachaDto.DrawResponse> drawGacha(UUID userId, GachaDto.DrawRequest request) {
         // 1. プール情報取得 & 期間チェック
         GachaPool pool = poolRepository.findByIdWithEmissions(request.poolId()).orElse(null);
         if (pool == null || !pool.isOpen()) {
-            return GachaErrorCode.GACHA_POOL_EXPIRED.toFailure();
+            return Result.failure(GachaErrorCode.GACHA_POOL_EXPIRED);
         }
 
         // 2. ウォレット取得 (悲観ロック)
-        Wallet wallet = walletRepository.findByIdWithLock(userId)
-                .orElseThrow(() -> new GachaException(GachaErrorCode.WALLET_NOT_FOUND));
+        // 見つからない場合は Failure を返す (例外ではなく結果として扱う)
+        var walletOpt = walletRepository.findByIdWithLock(userId);
+        if (walletOpt.isEmpty()) {
+            return Result.failure(GachaErrorCode.WALLET_NOT_FOUND);
+        }
+        Wallet wallet = walletOpt.get();
 
         // 3. コスト消費
         int totalCost = pool.getCostAmount() * request.drawCount();
@@ -51,8 +54,10 @@ public class GachaService {
         long snapshotFree = wallet.getFreeStones();
 
         Result<Wallet> consumeResult = wallet.consume(totalCost);
+
+        // Java 21 Pattern Matching for switch (Resultの中身を検査)
         if (consumeResult instanceof Result.Failure<Wallet> f) {
-            markRollback();
+            markRollback(); // 業務エラーでもDB更新を防ぐためロールバックマーク
             return Result.failure(f.errorCode(), f.message());
         }
 
@@ -60,22 +65,28 @@ public class GachaService {
         GachaState gachaState = stateRepository.findByUserAndPool(userId, pool.getId())
                 .orElseGet(() -> GachaState.create(userId, pool.getId()));
 
-        // 5. 抽選ループ (核心ロジック)
+        // 5. 抽選ループ
         List<GachaDto.EmissionItem> responseItems = new ArrayList<>();
         List<EmissionResult> eventDetails = new ArrayList<>();
 
         for (int i = 0; i < request.drawCount(); i++) {
             // A. 抽選
             Result<GachaEmission> drawResult = lotteryService.draw(pool.getEmissions());
-            if (drawResult instanceof Result.Failure<GachaEmission> f) {
+
+            GachaEmission emission;
+            if (drawResult instanceof Result.Success<GachaEmission>(var val)) {
+                emission = val;
+            } else if (drawResult instanceof Result.Failure<GachaEmission> f) {
                 markRollback();
                 return Result.failure(f.errorCode(), f.message());
+            } else {
+                throw new IllegalStateException("Unknown Result type");
             }
-            GachaEmission emission = ((Result.Success<GachaEmission>) drawResult).value();
 
             // B. 状態更新 (SSR判定などの簡易ロジック)
-            // TODO: マスタからRarityを取得する処理はCacheServiceなどに切り出すと良い
+            // TODO: マスタからRarityを取得する処理は本来CacheServiceなどに切り出す
             boolean isSsr = false;
+
             Result<GachaState> stateResult = gachaState.updateState(isSsr, pool);
             if (stateResult instanceof Result.Failure<GachaState> f) {
                 markRollback();
@@ -96,7 +107,6 @@ public class GachaService {
         stateRepository.save(gachaState);
 
         // 7. ドメインイベント発行 (副作用を委譲)
-        // インベントリ付与や履歴保存はリスナー側で行う
         RequestId requestId = RequestId.generate();
         GachaDrawnEvent event = new GachaDrawnEvent(
                 requestId,
@@ -116,6 +126,10 @@ public class GachaService {
         ));
     }
 
+    /**
+     * トランザクションをロールバック専用にマークする。
+     * Result.Failureを返す場合でも、DBへの変更（もしあれば）を確定させないために呼ぶ。
+     */
     private void markRollback() {
         TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
     }

@@ -1,7 +1,7 @@
 package com.yourcompany.web.controller;
 
+import com.sqlcanvas.sharedkernel.shared.result.Result;
 import com.yourcompany.domain.shared.exception.GachaException;
-import com.yourcompany.domain.shared.result.Result;
 import com.yourcompany.schoolasset.application.service.GachaService;
 import com.yourcompany.security.CustomUserDetails;
 import com.yourcompany.web.dto.GachaDto;
