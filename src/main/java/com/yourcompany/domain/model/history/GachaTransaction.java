@@ -1,7 +1,6 @@
 package com.yourcompany.domain.model.history;
 
-// ★修正: ライブラリのRequestIdをインポート
-import com.sqlcanvas.sharedkernel.shared.util.RequestId;
+import com.yourcompany.domain.shared.value.RequestId;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -20,13 +19,13 @@ import java.util.UUID;
 public class GachaTransaction {
 
     @Id
-    @Column(name = "request_id")
-    private String requestId; // DB上は文字列で持つのが一般的
+    @Column(name = "request_id") // DB: request_id (VARCHAR)
+    private String requestId;
 
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
-    @Column(name = "pool_id", nullable = false)
+    @Column(name = "pool_id", nullable = false) // DB: pool_id
     private UUID poolId;
 
     @Column(name = "consumed_paid", nullable = false)
@@ -35,15 +34,15 @@ public class GachaTransaction {
     @Column(name = "consumed_free", nullable = false)
     private int consumedFree;
 
-    @Column(name = "result_json", columnDefinition = "TEXT")
+    @Column(name = "result_json", columnDefinition = "TEXT") // DB: result_json
     private String resultJson;
 
-    @Column(name = "created_at", nullable = false)
+    @Column(name = "created_at", nullable = false) // DB: created_at
     private Instant createdAt;
 
     // コンストラクタ
     private GachaTransaction(RequestId requestId, UUID userId, UUID poolId, int consumedPaid, int consumedFree, String resultJson) {
-        this.requestId = requestId.toString(); // 文字列に変換して保存
+        this.requestId = requestId.toString(); // UUID -> String変換
         this.userId = userId;
         this.poolId = poolId;
         this.consumedPaid = consumedPaid;
@@ -52,8 +51,9 @@ public class GachaTransaction {
         this.createdAt = Instant.now();
     }
 
-    // ファクトリメソッド
-    // ★引数の型がライブラリのRequestIdになります
+    /**
+     * ファクトリメソッド
+     */
     public static GachaTransaction record(RequestId requestId, UUID userId, UUID poolId, int consumedPaid, int consumedFree, String resultJson) {
         return new GachaTransaction(requestId, userId, poolId, consumedPaid, consumedFree, resultJson);
     }

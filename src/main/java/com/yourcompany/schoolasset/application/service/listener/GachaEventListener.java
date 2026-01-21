@@ -12,6 +12,7 @@ import com.yourcompany.domain.shared.exception.GachaException;
 import com.yourcompany.schoolasset.infrastructure.persistence.repository.GachaTransactionRepository;
 import com.yourcompany.schoolasset.infrastructure.persistence.repository.InventoryItemRepository;
 import lombok.RequiredArgsConstructor;
+import com.yourcompany.domain.shared.value.RequestId;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;

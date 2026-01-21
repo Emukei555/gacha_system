@@ -4,6 +4,7 @@ import com.sqlcanvas.sharedkernel.shared.error.ErrorCode;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import com.sqlcanvas.sharedkernel.shared.result.Result;
 
 @Getter
 @RequiredArgsConstructor
@@ -42,4 +43,14 @@ public enum GachaErrorCode implements ErrorCode {
     private final String code;
     private final String defaultMessage;
     private final HttpStatus status;
+
+    // ★追加: 失敗Resultを生成するヘルパーメソッド
+    public <T> Result<T> toFailure() {
+        return Result.failure(this);
+    }
+
+    // ★追加: カスタムメッセージ付き
+    public <T> Result<T> toFailure(String detailMessage) {
+        return Result.failure(this, detailMessage);
+    }
 }
