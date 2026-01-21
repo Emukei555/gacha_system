@@ -1,6 +1,6 @@
 package com.yourcompany.security;
 
-import com.yourcompany.web.filter.RequestLoggingFilter;
+import com.sqlcanvas.sharedkernel.shared.filter.SharedRequestLoggingFilter; // ★ライブラリのインポート
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,11 +25,20 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
-    private final RequestLoggingFilter requestLoggingFilter; // ログ用フィルタもここに追加
     private final UserDetailsService userDetailsService;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+
+        // ★ここでライブラリのログフィルターを生成
+        // アプリ固有の「ユーザーIDの取り出し方」を定義して渡す
+        SharedRequestLoggingFilter sharedLoggingFilter = new SharedRequestLoggingFilter(auth -> {
+            if (auth.getPrincipal() instanceof CustomUserDetails userDetails) {
+                return userDetails.getUser().getId().toString();
+            }
+            return auth.getName(); // フォールバック
+        });
+
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session
@@ -43,9 +52,12 @@ public class SecurityConfig {
                         // その他は全て認証必須
                         .anyRequest().authenticated()
                 )
-                // フィルターの順序設定
+                // 1. JWT認証フィルターを、標準の認証フィルターの前に置く
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(requestLoggingFilter, JwtAuthenticationFilter.class);
+
+                // 2. ★修正: ログフィルターを「JWT認証の後」に追加する
+                // これにより、SecurityContextにユーザー情報が入った状態でログが出力される
+                .addFilterAfter(sharedLoggingFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }
