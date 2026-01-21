@@ -1,1 +1,2 @@
-rootProject.name = 'ToDoAPI'
+// 修正前: rootProject.name = 'ToDoAPI'
+rootProject.name = 'gacha-system'
