@@ -12,25 +12,21 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * ガチャ実行履歴 (Entity - Immutable)
- * 責務：実行結果の永続的な記録（証跡）。一度作成したら変更不可。
- */
 @Entity
 @Table(name = "gacha_transactions")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class GachaTransaction {
-    // RequestId を主キーとして利用 (冪等性担保のため)
+
     @Id
-    @Column(name = "id")
-    private UUID id;
+    @Column(name = "request_id") // DB: request_id (VARCHAR)
+    private String requestId;
 
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
-    @Column(name = "gacha_pool_id", nullable = false)
-    private UUID gachaPoolId;
+    @Column(name = "pool_id", nullable = false) // DB: pool_id
+    private UUID poolId;
 
     @Column(name = "consumed_paid", nullable = false)
     private int consumedPaid;
@@ -38,45 +34,27 @@ public class GachaTransaction {
     @Column(name = "consumed_free", nullable = false)
     private int consumedFree;
 
-    // JPA標準ではJSONBはサポート外のため、StringとしてJSONを保存するか、
-    // 専用ライブラリ導入が必要。ここではStringで定義。
-    @Column(name = "emission_results", columnDefinition = "jsonb", nullable = false)
-    private String emissionResultsJson;
+    @Column(name = "result_json", columnDefinition = "TEXT") // DB: result_json
+    private String resultJson;
 
-    @Column(name = "executed_at", nullable = false)
-    private Instant executedAt;
+    @Column(name = "created_at", nullable = false) // DB: created_at
+    private Instant createdAt;
 
-    // 全フィールド初期化コンストラクタ
-    private GachaTransaction(RequestId id, UUID userId, UUID poolId, int paid, int free, String resultsJson, Instant at) {
-        this.id = id.value();
+    // コンストラクタ
+    private GachaTransaction(RequestId requestId, UUID userId, UUID poolId, int consumedPaid, int consumedFree, String resultJson) {
+        this.requestId = requestId.toString(); // UUID -> String変換
         this.userId = userId;
-        this.gachaPoolId = poolId;
-        this.consumedPaid = paid;
-        this.consumedFree = free;
-        this.emissionResultsJson = resultsJson;
-        this.executedAt = at;
+        this.poolId = poolId;
+        this.consumedPaid = consumedPaid;
+        this.consumedFree = consumedFree;
+        this.resultJson = resultJson;
+        this.createdAt = Instant.now();
     }
-    /**
-     * トランザクション記録の作成
-     * ※このオブジェクトは「結果」なのでガード節は最低限（nullチェック等）のみ。
-     * ビジネスロジックの正当性はService層で担保済みである前提。
-     */
-    public static GachaTransaction record(
-            RequestId requestId,
-            UUID userId,
-            UUID gachaPoolId,
-            int consumedPaid,
-            int consumedFree,
-            String emissionResultsJson) {
 
-        return new GachaTransaction(
-                requestId,
-                userId,
-                gachaPoolId,
-                consumedPaid,
-                consumedFree,
-                emissionResultsJson,
-                Instant.now()
-        );
+    /**
+     * ファクトリメソッド
+     */
+    public static GachaTransaction record(RequestId requestId, UUID userId, UUID poolId, int consumedPaid, int consumedFree, String resultJson) {
+        return new GachaTransaction(requestId, userId, poolId, consumedPaid, consumedFree, resultJson);
     }
 }

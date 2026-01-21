@@ -2,16 +2,17 @@ package com.yourcompany.schoolasset.application.service.listener;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.yourcompany.domain.model.gacha.EmissionResult;
 import com.yourcompany.domain.model.gacha.event.GachaDrawnEvent;
 import com.yourcompany.domain.model.history.GachaTransaction;
 import com.yourcompany.domain.model.inventory.InventoryItem;
 import com.yourcompany.domain.shared.exception.GachaErrorCode;
 import com.yourcompany.domain.shared.exception.GachaException;
-import com.yourcompany.domain.shared.result.Result;
 import com.yourcompany.schoolasset.infrastructure.persistence.repository.GachaTransactionRepository;
 import com.yourcompany.schoolasset.infrastructure.persistence.repository.InventoryItemRepository;
 import lombok.RequiredArgsConstructor;
+import com.yourcompany.domain.shared.value.RequestId;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -41,13 +42,14 @@ public class GachaEventListener {
             InventoryItem item = inventoryRepository.findByUserAndItem(event.userId(), result.itemId())
                     .orElseGet(() -> InventoryItem.create(event.userId(), result.itemId()));
 
-            Result<InventoryItem> addResult = item.addQuantity(1, maxCapacity);
-
-            if (addResult instanceof Result.Failure<InventoryItem> f) {
-                // ここで例外を投げると、大元の drawGacha トランザクション全体がロールバックされる
-                log.error("Failed to grant item. userId={}, itemId={}, error={}", event.userId(), result.itemId(), f.message());
-                throw new GachaException(f.errorCode());
-            }
+            // 修正: Result.orElseThrow を使用してシンプルに記述
+            // 失敗時は GachaException を投げてトランザクションをロールバックさせる
+            item.addQuantity(1, maxCapacity)
+                    .orElseThrow(failure -> {
+                        log.error("Failed to grant item. userId={}, itemId={}, error={}",
+                                event.userId(), result.itemId(), failure.message());
+                        return new GachaException((GachaErrorCode) failure.errorCode());
+                    });
 
             inventoryRepository.save(item);
         }
@@ -64,6 +66,9 @@ public class GachaEventListener {
         try {
             String jsonResult = objectMapper.writeValueAsString(event.results());
 
+            // GachaTransaction.record が Result を返す場合は .orElseThrow(...) が必要ですが、
+            // バリデーション不要な単純な記録用メソッドであればオブジェクト返却でOKです。
+            // 現状はオブジェクトを返している前提で記述します。
             GachaTransaction transaction = GachaTransaction.record(
                     event.requestId(),
                     event.userId(),
@@ -77,7 +82,8 @@ public class GachaEventListener {
 
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize emission results", e);
-            throw new GachaException(GachaErrorCode.INTERNAL_ERROR);
+            // 修正: INTERNAL_ERROR (廃止) -> UNEXPECTED_ERROR に変更
+            throw new GachaException(GachaErrorCode.UNEXPECTED_ERROR);
         }
     }
 }

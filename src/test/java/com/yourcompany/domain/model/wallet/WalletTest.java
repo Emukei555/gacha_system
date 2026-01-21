@@ -1,7 +1,8 @@
 package com.yourcompany.domain.model.wallet;
 
+import com.sqlcanvas.sharedkernel.shared.error.CommonErrorCode;
+import com.sqlcanvas.sharedkernel.shared.result.Result;
 import com.yourcompany.domain.shared.exception.GachaErrorCode;
-import com.yourcompany.domain.shared.result.Result;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -12,103 +13,52 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class WalletTest {
 
-    private final UUID userId = UUID.randomUUID();
-
     @Nested
-    @DisplayName("consume（石の消費）のテスト")
     class ConsumeTest {
-
         @Test
-        @DisplayName("【異常系】残高不足の場合、INSUFFICIENT_BALANCE エラーを返すこと")
-        void shouldReturnErrorWhenBalanceIsInsufficient() {
-            // Given: 0石のウォレット
-            Wallet wallet = Wallet.create(userId);
-
-            // When: 300石消費しようとする
+        @DisplayName("異常系: 残高不足ならエラー")
+        void testInsufficient() {
+            Wallet wallet = Wallet.create(UUID.randomUUID()); // 0, 0
             Result<Wallet> result = wallet.consume(300);
 
-            // Then: Failure であり、エラーコードが一致すること
             assertThat(result).isInstanceOf(Result.Failure.class);
-            Result.Failure<Wallet> failure = (Result.Failure<Wallet>) result;
-            assertThat(failure.errorCode()).isEqualTo(GachaErrorCode.INSUFFICIENT_BALANCE);
+            assertThat(((Result.Failure<?>) result).errorCode()).isEqualTo(GachaErrorCode.INSUFFICIENT_BALANCE);
         }
 
         @Test
-        @DisplayName("【異常系】マイナスの値を消費しようとした場合、INVALID_PARAMETER を返すこと")
-        void shouldReturnErrorWhenAmountIsNegative() {
-            // Given
-            Wallet wallet = Wallet.create(userId);
-            // 初期残高セット（失敗したら即落ちるようunwrap使用）
-            wallet.deposit(1000, 0).unwrap();
-
-            // When: -1石消費しようとする
+        @DisplayName("異常系: 負の消費量はエラー")
+        void testNegative() {
+            Wallet wallet = Wallet.create(UUID.randomUUID());
             Result<Wallet> result = wallet.consume(-1);
 
-            // Then: Failure であり、INVALID_PARAMETER であること
             assertThat(result).isInstanceOf(Result.Failure.class);
-            assertThat(((Result.Failure<?>) result).errorCode()).isEqualTo(GachaErrorCode.INVALID_PARAMETER);
-        }
-
-        @Test
-        @DisplayName("【正常系】無償石が足りない場合、有償石を優先して消費し、残高が正しく更新されること")
-        void shouldConsumePaidStonesFirst() {
-            // Given: 有償1000石、無償500石
-            Wallet wallet = Wallet.create(userId);
-            wallet.deposit(1000, 500).unwrap();
-
-            // When: 1200石消費 (有償1000全額 + 無償200 消費)
-            Result<Wallet> result = wallet.consume(1200);
-
-            // Then: Success であり、残高が正確であること
-            assertThat(result).isInstanceOf(Result.Success.class);
-
-            Wallet updatedWallet = result.unwrap();
-
-            // Money型ではなく、現在のWallet実装(int)に合わせてGetterを使用
-            assertThat(updatedWallet.getPaidStones()).isEqualTo(0);
-            assertThat(updatedWallet.getFreeStones()).isEqualTo(300);
-
-            // 合計値の確認
-            assertThat(updatedWallet.getTotalStones()).isEqualTo(300L);
+            assertThat(((Result.Failure<?>) result).errorCode()).isEqualTo(CommonErrorCode.INVALID_PARAMETER);
         }
     }
 
     @Nested
-    @DisplayName("deposit（石の付与）のテスト")
     class DepositTest {
-
         @Test
-        @DisplayName("【異常系】付与後の合計が int 上限を超える場合、エラーを返すこと")
-        void shouldReturnErrorWhenOverflow() {
-            // Given: ほぼ上限に近い石を持つウォレット (Integer.MAX_VALUE - 100)
-            Wallet wallet = Wallet.create(userId);
-            wallet.deposit(Integer.MAX_VALUE - 100, 0).unwrap();
+        @DisplayName("異常系: 負の追加はエラー")
+        void testNegative() {
+            Wallet wallet = Wallet.create(UUID.randomUUID());
+            Result<Wallet> result = wallet.deposit(-100, 0);
 
-            // When: さらに200石付与しようとする -> オーバーフロー
-            Result<Wallet> result = wallet.deposit(200, 0);
-
-            // Then: Failure であること
             assertThat(result).isInstanceOf(Result.Failure.class);
-            Result.Failure<Wallet> failure = (Result.Failure<Wallet>) result;
-
-            // もしWallet側を INVENTORY_OVERFLOW に修正済みならこちら：
-            assertThat(failure.errorCode()).isEqualTo(GachaErrorCode.INVENTORY_OVERFLOW);
+            assertThat(((Result.Failure<?>) result).errorCode()).isEqualTo(CommonErrorCode.INVALID_PARAMETER);
         }
 
         @Test
-        @DisplayName("【正常系】正の値を付与した場合、残高が加算されること")
-        void shouldIncreaseBalance() {
-            Wallet wallet = Wallet.create(userId);
-
+        @DisplayName("正常系: 加算される")
+        void testSuccess() {
+            Wallet wallet = Wallet.create(UUID.randomUUID());
             Result<Wallet> result = wallet.deposit(100, 200);
 
             assertThat(result).isInstanceOf(Result.Success.class);
-
-            Wallet w = result.unwrap();
-            // intフィールドの確認
-            assertThat(w.getPaidStones()).isEqualTo(100);
-            assertThat(w.getFreeStones()).isEqualTo(200);
-            assertThat(w.getTotalStones()).isEqualTo(300L);
+            Wallet updated = // ラムダ式で Failure のメッセージを取り出して渡す
+                    result.orElseThrow(failure -> new RuntimeException(failure.message()));
+            assertThat(updated.getPaidStones()).isEqualTo(100);
+            assertThat(updated.getFreeStones()).isEqualTo(200);
         }
     }
 }

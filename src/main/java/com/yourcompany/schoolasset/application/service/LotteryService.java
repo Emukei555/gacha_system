@@ -1,8 +1,8 @@
 package com.yourcompany.schoolasset.application.service;
 
+import com.sqlcanvas.sharedkernel.shared.result.Result;
 import com.yourcompany.domain.model.gacha.WeightedItem;
 import com.yourcompany.domain.shared.exception.GachaErrorCode;
-import com.yourcompany.domain.shared.result.Result;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
@@ -19,20 +19,24 @@ public class LotteryService {
      */
     public <T extends WeightedItem> Result<T> draw(List<T> items) {
         if (items == null || items.isEmpty()) {
-            return GachaErrorCode.INTERNAL_ERROR.toFailure("排出対象リストが空です");
+            // 修正: INTERNAL_ERROR (廃止) -> INVALID_WEIGHT_CONFIG (設定ミス) に変更
+            // かつ Result.failure ファクトリメソッドを使用
+            return Result.failure(GachaErrorCode.INVALID_WEIGHT_CONFIG, "排出対象リストが空です");
         }
 
-        // 1. 重みの合計を計算 (オーバーフロー対策でlong推奨だが、仕様によりintでも可)
+        // 1. 重みの合計を計算
         long totalWeight = 0;
         for (T item : items) {
             if (item.getWeight() <= 0) {
-                return GachaErrorCode.INVALID_WEIGHT_CONFIG.toFailure("重みが0以下のアイテムが含まれています");
+                // 修正: Result.failure を使用
+                return Result.failure(GachaErrorCode.INVALID_WEIGHT_CONFIG, "重みが0以下のアイテムが含まれています");
             }
             totalWeight += item.getWeight();
         }
 
         if (totalWeight == 0) {
-            return GachaErrorCode.INVALID_WEIGHT_CONFIG.toFailure("合計ウェイトが0です");
+            // 修正: Result.failure を使用
+            return Result.failure(GachaErrorCode.INVALID_WEIGHT_CONFIG, "合計ウェイトが0です");
         }
 
         // 2. 0 〜 (totalWeight - 1) の乱数を生成
@@ -48,8 +52,8 @@ public class LotteryService {
             randomValue -= item.getWeight();
         }
 
-        // ここに来ることは論理的にありえない（TotalWeightの範囲内で抽選しているため）
-        // しかし、堅牢性のためにエラーを返す
-        return GachaErrorCode.UNEXPECTED_ERROR.toFailure("抽選ロジックが破綻しました");
+        // ここに来ることは論理的にありえない
+        // 修正: Result.failure を使用
+        return Result.failure(GachaErrorCode.UNEXPECTED_ERROR, "抽選ロジックが破綻しました");
     }
 }

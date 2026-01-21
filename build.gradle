@@ -23,9 +23,28 @@ configurations {
 
 repositories {
     mavenCentral()
+    mavenLocal() // ローカル発行 (publishToMavenLocal) したものを使う場合に必要
+
+    // ★追加: GitHub Packages (my-shared-kernel) の設定
+    maven {
+        name = "GitHubPackages"
+        // リポジトリのURL (ユーザー名/リポジトリ名)
+        url = uri("https://maven.pkg.github.com/Emukei555/my-shared-kernel")
+        credentials {
+            // ~/.gradle/gradle.properties に設定した認証情報を使用
+            username = project.findProperty("gpr.user") ?: System.getenv("GITHUB_ACTOR")
+            password = project.findProperty("gpr.key") ?: System.getenv("GITHUB_TOKEN")
+        }
+    }
 }
 
 dependencies {
+    // ★変更: バージョンをリリース版 (0.1.0) に指定
+    // groupId (com.yourcompany) はライブラリ側の build.gradle と一致させる必要があります
+    implementation 'com.yourcompany:shared-kernel:0.1.3'
+
+    implementation 'net.logstash.logback:logstash-logback-encoder:7.4'
+
     // --- Web API ---
     implementation 'org.springframework.boot:spring-boot-starter-web'
     // 入力チェック (@Valid)
@@ -35,6 +54,7 @@ dependencies {
 
     // --- DB接続 / 管理 ---
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     runtimeOnly 'org.postgresql:postgresql'
 
     // Flyway (DBマイグレーション)

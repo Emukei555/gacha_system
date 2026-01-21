@@ -1,18 +1,16 @@
-package com.yourcompany.schoolasset.application.service;
+package com.yourcompany.features.gacha.draw;
 
 import com.yourcompany.domain.model.gacha.*;
 import com.yourcompany.domain.model.gacha.event.GachaDrawnEvent;
 import com.yourcompany.domain.model.wallet.Wallet;
 import com.yourcompany.domain.shared.exception.GachaErrorCode;
 import com.yourcompany.domain.shared.exception.GachaException;
-import com.yourcompany.domain.shared.result.Result;
-import com.yourcompany.domain.shared.value.RequestId;
-import com.yourcompany.schoolasset.infrastructure.persistence.repository.GachaPoolRepository;
-import com.yourcompany.schoolasset.infrastructure.persistence.repository.GachaStateRepository;
-import com.yourcompany.schoolasset.infrastructure.persistence.repository.WalletRepository;
-import com.yourcompany.web.dto.GachaDto;
+import com.sqlcanvas.sharedkernel.shared.result.Result;
+import com.yourcompany.schoolasset.infrastructure.persistence.repository.*; // パッケージ移動後は修正が必要
+import com.yourcompany.schoolasset.application.service.LotteryService; // 共通サービスとして残すか、ここに移すか検討
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.yourcompany.domain.shared.value.RequestId;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,17 +23,17 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class GachaService {
+public class DrawGachaUseCase {
 
     private final WalletRepository walletRepository;
     private final GachaPoolRepository poolRepository;
     private final GachaStateRepository stateRepository;
-    private final LotteryService lotteryService;
-    private final ApplicationEventPublisher eventPublisher; // イベント発行用
+    private final LotteryService lotteryService; // 抽選ロジックはドメインサービスとして共有
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
-    public Result<GachaDto.DrawResponse> drawGacha(UUID userId, GachaDto.DrawRequest request) {
-        // 1. プール情報取得 & 期間チェック
+    public Result<DrawGachaResponse> execute(UUID userId, DrawGachaRequest request) {
+        // 1. プール情報取得
         GachaPool pool = poolRepository.findByIdWithEmissions(request.poolId()).orElse(null);
         if (pool == null || !pool.isOpen()) {
             return GachaErrorCode.GACHA_POOL_EXPIRED.toFailure();
@@ -60,8 +58,8 @@ public class GachaService {
         GachaState gachaState = stateRepository.findByUserAndPool(userId, pool.getId())
                 .orElseGet(() -> GachaState.create(userId, pool.getId()));
 
-        // 5. 抽選ループ (核心ロジック)
-        List<GachaDto.EmissionItem> responseItems = new ArrayList<>();
+        // 5. 抽選ループ
+        List<DrawGachaResponse.EmissionItem> responseItems = new ArrayList<>();
         List<EmissionResult> eventDetails = new ArrayList<>();
 
         for (int i = 0; i < request.drawCount(); i++) {
@@ -73,17 +71,16 @@ public class GachaService {
             }
             GachaEmission emission = ((Result.Success<GachaEmission>) drawResult).value();
 
-            // B. 状態更新 (SSR判定などの簡易ロジック)
-            // TODO: マスタからRarityを取得する処理はCacheServiceなどに切り出すと良い
-            boolean isSsr = false;
+            // B. 状態更新
+            boolean isSsr = false; // TODO: Item情報を取得して判定
             Result<GachaState> stateResult = gachaState.updateState(isSsr, pool);
             if (stateResult instanceof Result.Failure<GachaState> f) {
                 markRollback();
                 return Result.failure(f.errorCode(), f.message());
             }
 
-            // 結果リスト構築
-            responseItems.add(new GachaDto.EmissionItem(
+            // DTO詰め替え
+            responseItems.add(new DrawGachaResponse.EmissionItem(
                     emission.getItemId(), "ItemName", "R", false, 1
             ));
             eventDetails.add(new EmissionResult(
@@ -91,12 +88,11 @@ public class GachaService {
             ));
         }
 
-        // 6. 永続化 (Aggregate Roots)
+        // 6. 永続化
         walletRepository.save(wallet);
         stateRepository.save(gachaState);
 
-        // 7. ドメインイベント発行 (副作用を委譲)
-        // インベントリ付与や履歴保存はリスナー側で行う
+        // 7. イベント発行
         RequestId requestId = RequestId.generate();
         GachaDrawnEvent event = new GachaDrawnEvent(
                 requestId,
@@ -108,7 +104,7 @@ public class GachaService {
         );
         eventPublisher.publishEvent(event);
 
-        return Result.success(new GachaDto.DrawResponse(
+        return Result.success(new DrawGachaResponse(
                 requestId.toString(),
                 event.consumedPaid(),
                 event.consumedFree(),

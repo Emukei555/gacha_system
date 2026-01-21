@@ -1,7 +1,7 @@
 package com.yourcompany.domain.model.gacha.event;
 
-import com.yourcompany.domain.model.gacha.EmissionResult;
 import com.yourcompany.domain.shared.value.RequestId;
+import com.yourcompany.domain.model.gacha.EmissionResult;
 
 import java.time.Instant;
 import java.util.List;

@@ -1,7 +1,8 @@
 package com.yourcompany.domain.model.gacha;
 
+import com.sqlcanvas.sharedkernel.shared.error.CommonErrorCode;
+import com.sqlcanvas.sharedkernel.shared.result.Result;
 import com.yourcompany.domain.shared.exception.GachaErrorCode;
-import com.yourcompany.domain.shared.result.Result;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -66,7 +67,7 @@ public class GachaState {
         if (pityCeiling < 0) {
             log.warn("Invalid pity ceiling detected. userId={}, poolId={}, ceiling={}",
                     userId, gachaPoolId, pityCeiling);
-            return GachaErrorCode.INVALID_PARAMETER.toFailure("Pity ceiling must be non-negative");
+            return Result.failure(CommonErrorCode.INVALID_PARAMETER, "コストは1以上である必要があります");
         }
 
         int previousPity = Math.max(0, this.currentPityCount); // 不整合ガード

@@ -1,7 +1,8 @@
 package com.yourcompany.domain.model.gacha;
 
+import com.sqlcanvas.sharedkernel.shared.error.CommonErrorCode;
+import com.sqlcanvas.sharedkernel.shared.result.Result;
 import com.yourcompany.domain.shared.exception.GachaErrorCode;
-import com.yourcompany.domain.shared.result.Result;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -63,7 +64,7 @@ class GachaStateTest {
             // Then
             assertThat(result).isInstanceOf(Result.Failure.class);
             Result.Failure<GachaState> failure = (Result.Failure<GachaState>) result;
-            assertThat(failure.errorCode()).isEqualTo(GachaErrorCode.INVALID_PARAMETER);
+            assertThat(failure.errorCode()).isEqualTo(CommonErrorCode.INVALID_PARAMETER);
         }
 
         @Test

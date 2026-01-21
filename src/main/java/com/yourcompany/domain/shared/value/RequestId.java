@@ -1,7 +1,8 @@
 package com.yourcompany.domain.shared.value;
 
+import com.sqlcanvas.sharedkernel.shared.error.CommonErrorCode;
+import com.sqlcanvas.sharedkernel.shared.result.Result;
 import com.yourcompany.domain.shared.exception.GachaErrorCode;
-import com.yourcompany.domain.shared.result.Result;
 import lombok.extern.slf4j.Slf4j;
 
 import java.security.SecureRandom;
@@ -63,7 +64,7 @@ public record RequestId(UUID value) {
     public static Result<RequestId> from(String uuidString) {
         if (uuidString == null || uuidString.isBlank()) {
             log.warn("RequestId is null or empty.");
-            return GachaErrorCode.INVALID_PARAMETER.toFailure("IDが空です");
+            return Result.failure(CommonErrorCode.INVALID_PARAMETER,"IDが空です");
         }
 
         try {
@@ -72,7 +73,7 @@ public record RequestId(UUID value) {
         } catch (IllegalArgumentException e) {
             // クライアントからの入力ミスなどが想定されるため WARN
             log.warn("Invalid UUID format received: {}", uuidString);
-            return GachaErrorCode.INVALID_PARAMETER.toFailure("無効なID形式です: " + uuidString);
+            return Result.failure(CommonErrorCode.INVALID_PARAMETER,"無効なID形式です: " + uuidString);
         }
     }
 
