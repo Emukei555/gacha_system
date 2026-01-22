@@ -7,7 +7,8 @@ plugins {
 
 group = 'com.sqlcanvas'
 version = '0.0.1-SNAPSHOT'
-description = 'ToDoAPI'
+// 修正前: description = 'ToDoAPI'
+description = 'Ultimate Gacha System'
 
 java {
     toolchain {
@@ -39,9 +40,8 @@ repositories {
 }
 
 dependencies {
-    // ★変更: バージョンをリリース版 (0.1.0) に指定
     // groupId (com.yourcompany) はライブラリ側の build.gradle と一致させる必要があります
-    implementation 'com.yourcompany:shared-kernel:0.1.3'
+    implementation 'com.yourcompany:shared-kernel:0.1.4'
 
     implementation 'net.logstash.logback:logstash-logback-encoder:7.4'
 
